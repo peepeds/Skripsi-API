@@ -1,0 +1,40 @@
+# ===== Key Store =====
+*keystore.p12
+
+# ===== OS-specific =====
+.DS_Store
+
+# ===== IntelliJ IDEA =====
+.idea/
+*.iml
+out/
+
+# ===== Maven =====
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+
+# Maven wrapper logs
+.mvn/wrapper/maven-wrapper.jar
+
+# ===== Logs & temporary files =====
+*.log
+*.tmp
+*.bak
+
+# ===== Environment / Config =====
+*.env
+*.local
+*.secret
+
+# ===== System files =====
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ===== Other IDEs (optional) =====
+.vscode/
+
