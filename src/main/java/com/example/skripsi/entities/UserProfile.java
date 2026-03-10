@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Size;
 import lombok.*;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 
 @Entity
 @Table(name = "user_profiles")
@@ -48,4 +49,7 @@ public class UserProfile {
 
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
+
+    @OneToMany(mappedBy = "userProfile", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<UserCertificates> userCertificates;
 }

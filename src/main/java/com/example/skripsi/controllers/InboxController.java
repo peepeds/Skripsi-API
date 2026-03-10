@@ -1,0 +1,32 @@
+package com.example.skripsi.controllers;
+
+import com.example.skripsi.interfaces.IInboxService;
+import com.example.skripsi.models.WebResponse;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/inbox")
+public class InboxController {
+
+    private final IInboxService inboxService;
+
+    public InboxController(IInboxService inboxService) {
+        this.inboxService = inboxService;
+    }
+
+    @GetMapping("")
+    @PreAuthorize("isAuthenticated()")
+    public WebResponse<?> getInboxPreview(
+            @RequestParam(value = "page", defaultValue = "0") int page,
+            @RequestParam(value = "limit", defaultValue = "5") int limit) {
+        var results = inboxService.getUserInboxPreview(page, limit);
+        return WebResponse.builder()
+                .success(true)
+                .message("Inbox fetched")
+                .meta(results.getMeta())
+                .result(results.getResult())
+                .build();
+    }
+}
+

@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Data
 @Builder
 @AllArgsConstructor
@@ -22,5 +24,6 @@ public class UserResponse {
     private String majorName;
     private String role;
     private String lastLogin;
-
+    private List<CertificateResponse> certificates;
+    private List<CertificateUrlResponse> certificate;
 }

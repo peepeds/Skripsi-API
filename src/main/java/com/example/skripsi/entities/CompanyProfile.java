@@ -2,27 +2,35 @@ package com.example.skripsi.entities;
 
 import jakarta.persistence.*;
 import lombok.*;
-
 import java.time.OffsetDateTime;
 
 @Entity
-@Table(name = "companies")
+@Table(name = "company_profiles")
 @NoArgsConstructor
 @AllArgsConstructor
 @Getter
 @Setter
 @Builder
-public class Company {
-    @Column(name = "company_id")
+public class CompanyProfile {
     @Id
+    @Column(name = "company_profile_id")
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long companyProfileId;
+
+    @Column(name = "company_id")
     private Long companyId;
 
-    @Column(name = "company_name")
-    private String companyName;
+    @Column(name = "bio")
+    private String bio;
 
-    @Column(name = "company_abbreviation")
-    private String companyAbbreviation;
+    @Column(name = "website")
+    private String website;
+
+    @Column(name = "is_partner")
+    private Boolean isPartner;
+
+    @Column(name = "created_at")
+    private OffsetDateTime createdAt;
 
     @Column(name = "created_by")
     private Long createdBy;
@@ -32,8 +40,5 @@ public class Company {
 
     @Column(name = "updated_by")
     private Long updatedBy;
-
-    @Column(name = "company_slug")
-    private String companySlug;
-
 }
+

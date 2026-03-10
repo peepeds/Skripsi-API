@@ -60,6 +60,10 @@ public class AuthService implements IAuthService {
         Major major = majorRepository.findById(register.getMajorId())
                 .orElseThrow(() -> new BadRequestExceptions("Major not found"));
 
+        if (!major.getRegion().getRegionId().equals(region.getRegionId())) {
+            throw new BadRequestExceptions("Major does not belong to the selected region");
+        }
+
         String encodedPassword = BCrypt.hashpw(
                 register.getPassword(),
                 BCrypt.gensalt()
@@ -133,6 +137,10 @@ public class AuthService implements IAuthService {
 
         userTokenRepository.save(token);
 
+        return toAuthResponse(accessToken, refreshToken);
+    }
+
+    private AuthResponse toAuthResponse(String accessToken, String refreshToken) {
         return AuthResponse.builder()
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
@@ -158,9 +166,7 @@ public class AuthService implements IAuthService {
 
         String newAccessToken = jwtUtils.generateAccessToken(user.getEmail(), roles);
 
-        return AuthResponse.builder()
-                .accessToken(newAccessToken)
-                .build();
+        return toAuthResponse(newAccessToken, null);
     }
 
     @Override

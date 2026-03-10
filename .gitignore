@@ -20,6 +20,9 @@ release.properties
 # Maven wrapper logs
 .mvn/wrapper/maven-wrapper.jar
 
+# ===== SQL files =====
+*.sql
+
 # ===== Logs & temporary files =====
 *.log
 *.tmp
@@ -37,4 +40,5 @@ Desktop.ini
 
 # ===== Other IDEs (optional) =====
 .vscode/
+
 
