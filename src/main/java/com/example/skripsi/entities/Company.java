@@ -21,8 +21,14 @@ public class Company {
     @Column(name = "company_name")
     private String companyName;
 
-    @Column(name = "website")
-    private String website;
+    @Column(name = "company_abbreviation")
+    private String companyAbbreviation;
+
+    @Column(name = "company_slug")
+    private String companySlug;
+
+    @Column(name = "created_at")
+    private OffsetDateTime createdAt;
 
     @Column(name = "created_by")
     private Long createdBy;

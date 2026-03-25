@@ -1,9 +1,8 @@
 package com.example.skripsi.controllers;
 
-import com.example.skripsi.interfaces.IMajorService;
-import com.example.skripsi.models.WebResponse;
-import com.example.skripsi.models.major.CreateMajorRequest;
-import com.example.skripsi.models.major.UpdateMajorRequest;
+import com.example.skripsi.interfaces.*;
+import com.example.skripsi.models.*;
+import com.example.skripsi.models.major.*;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;

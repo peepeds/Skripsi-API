@@ -1,10 +1,7 @@
 package com.example.skripsi.controllers;
 
-import com.example.skripsi.exceptions.BadRequestExceptions;
-import com.example.skripsi.exceptions.CustomAccesDeniedExceptions;
-import com.example.skripsi.exceptions.InvalidCredentialsException;
-import com.example.skripsi.exceptions.InvalidTokenException;
-import com.example.skripsi.models.WebResponse;
+import com.example.skripsi.exceptions.*;
+import com.example.skripsi.models.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -67,6 +64,24 @@ public class ErrorController {
     @ExceptionHandler(InvalidTokenException.class)
     public ResponseEntity<WebResponse<String>> handleInvalidRefreshToken(InvalidTokenException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(WebResponse.<String>builder()
+                        .success(false)
+                        .message(ex.getMessage())
+                        .build());
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<WebResponse<String>> handleResourceNotFound(ResourceNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(WebResponse.<String>builder()
+                        .success(false)
+                        .message(ex.getMessage())
+                        .build());
+    }
+
+    @ExceptionHandler(ValidationException.class)
+    public ResponseEntity<WebResponse<String>> handleValidationError(ValidationException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(WebResponse.<String>builder()
                         .success(false)
                         .message(ex.getMessage())

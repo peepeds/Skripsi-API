@@ -1,11 +1,10 @@
 package com.example.skripsi.controllers;
 
-import com.example.skripsi.configs.JwtConfig;
-import com.example.skripsi.exceptions.BadRequestExceptions;
-import com.example.skripsi.interfaces.IAuthService;
-import com.example.skripsi.models.WebResponse;
-import com.example.skripsi.models.auth.Login;
-import com.example.skripsi.models.auth.Register;
+import com.example.skripsi.configs.*;
+import com.example.skripsi.exceptions.*;
+import com.example.skripsi.interfaces.*;
+import com.example.skripsi.models.*;
+import com.example.skripsi.models.auth.*;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;

@@ -1,20 +1,11 @@
 package com.example.skripsi.services;
 
-import com.example.skripsi.entities.Department;
-import com.example.skripsi.entities.Major;
-import com.example.skripsi.entities.Region;
-import com.example.skripsi.entities.User;
-import com.example.skripsi.exceptions.BadRequestExceptions;
-import com.example.skripsi.interfaces.IMajorService;
-import com.example.skripsi.models.major.CreateMajorRequest;
-import com.example.skripsi.models.major.MajorResponse;
-import com.example.skripsi.models.major.MajorOptionResponse;
-import com.example.skripsi.models.major.UpdateMajorRequest;
-import com.example.skripsi.repositories.DepartmentRepository;
-import com.example.skripsi.repositories.MajorRepository;
-import com.example.skripsi.repositories.RegionRepository;
-import com.example.skripsi.repositories.UserRepository;
-import com.example.skripsi.securities.SecurityUtils;
+import com.example.skripsi.entities.*;
+import com.example.skripsi.exceptions.*;
+import com.example.skripsi.interfaces.*;
+import com.example.skripsi.models.major.*;
+import com.example.skripsi.repositories.*;
+import com.example.skripsi.securities.*;
 import jakarta.transaction.Transactional;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -65,10 +56,10 @@ public class MajorService implements IMajorService {
         }
 
         Region region = regionRepository.findById(createMajorRequest.getRegionId())
-                .orElseThrow(() -> new RuntimeException("Region not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Region not found"));
 
         Department department = departmentRepository.findById(createMajorRequest.getDeptId())
-                .orElseThrow(() -> new RuntimeException("Department not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Department not found"));
 
         Major major = Major.builder()
                 .majorName(createMajorRequest.getMajorName())

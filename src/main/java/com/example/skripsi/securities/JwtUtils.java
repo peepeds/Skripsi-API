@@ -1,8 +1,8 @@
 package com.example.skripsi.securities;
 
-import com.example.skripsi.configs.JwtConfig;
-import com.example.skripsi.entities.User;
-import com.example.skripsi.repositories.UserRepository;
+import com.example.skripsi.configs.*;
+import com.example.skripsi.entities.*;
+import com.example.skripsi.repositories.*;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;

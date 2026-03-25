@@ -1,9 +1,6 @@
 package com.example.skripsi.models.auth;
 
-import com.example.skripsi.validation.ValidEmail;
-import com.example.skripsi.validation.ValidPassword;
-import com.example.skripsi.validation.ValidPhoneNumber;
-import com.example.skripsi.validation.ValidRegisterId;
+import com.example.skripsi.validation.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
