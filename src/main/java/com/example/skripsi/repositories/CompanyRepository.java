@@ -1,7 +1,8 @@
 package com.example.skripsi.repositories;
 
-import com.example.skripsi.entities.Company;
-import com.example.skripsi.models.company.CompanyOptionsResponse;
+import com.example.skripsi.entities.*;
+import com.example.skripsi.models.company.*;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -42,4 +43,24 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
         ORDER BY c.companyName ASC
     """)
     List<CompanyOptionsResponse> searchCompanies(@Param("search") String search);
+
+    Company findByCompanySlug(String companySlug);
+
+    @Query("""
+        SELECT DISTINCT new com.example.skripsi.models.company.CompanyOptionsResponse(
+            c.companyId,
+            c.companyName,
+            c.companyAbbreviation,
+            c.companySlug
+        )
+        FROM Company c
+        JOIN InternshipHeader ih ON ih.company = c
+        JOIN InternshipJobSubCategory ijs ON ijs.internshipHeaderId = ih.internshipHeaderId
+        WHERE ijs.subCategoryId = :subCategoryId
+        ORDER BY c.companyName ASC
+    """)
+    Page<CompanyOptionsResponse> findCompaniesBySubCategoryId(
+            @Param("subCategoryId") Long subCategoryId,
+            Pageable pageable
+    );
 }

@@ -36,7 +36,7 @@ public class Notification {
     private OffsetDateTime createdAt;
 
     @OneToMany(mappedBy = "notification", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<RequestDocument> documents;
+    private List<UserCertificateRequest> documents;
 
     @OneToMany(mappedBy = "notification", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<UserNotification> userNotifications;

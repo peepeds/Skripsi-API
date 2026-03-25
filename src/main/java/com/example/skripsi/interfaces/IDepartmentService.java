@@ -1,8 +1,6 @@
 package com.example.skripsi.interfaces;
 
-import com.example.skripsi.models.department.CreateDepartmentRequest;
-import com.example.skripsi.models.department.DepartmentResponse;
-import com.example.skripsi.models.department.UpdateDepartmentRequest;
+import com.example.skripsi.models.department.*;
 
 import java.util.List;
 

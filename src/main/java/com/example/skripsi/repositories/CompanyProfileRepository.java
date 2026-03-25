@@ -1,6 +1,6 @@
 package com.example.skripsi.repositories;
 
-import com.example.skripsi.entities.CompanyProfile;
+import com.example.skripsi.entities.*;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

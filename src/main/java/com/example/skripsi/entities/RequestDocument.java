@@ -6,7 +6,7 @@ import lombok.*;
 import java.time.OffsetDateTime;
 
 @Entity
-@Table(name = "request_documents")
+@Table(name = "user_certificate_requests")
 @NoArgsConstructor
 @AllArgsConstructor
 @Getter

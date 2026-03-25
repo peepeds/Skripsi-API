@@ -1,6 +1,6 @@
 package com.example.skripsi.interfaces;
 
-import com.example.skripsi.models.audit.AuditLogResponse;
+import com.example.skripsi.models.audit.*;
 
 import java.util.List;
 

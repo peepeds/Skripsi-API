@@ -1,7 +1,7 @@
 package com.example.skripsi.repositories;
 
-import com.example.skripsi.entities.Region;
-import com.example.skripsi.models.region.RegionOptionResponse;
+import com.example.skripsi.entities.*;
+import com.example.skripsi.models.region.*;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 

@@ -1,7 +1,6 @@
 package com.example.skripsi.configs;
 
-import com.example.skripsi.securities.JwtAuthEntryPoint;
-import com.example.skripsi.securities.JwtFilter;
+import com.example.skripsi.securities.*;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -40,18 +39,9 @@ public class SecurityConfig {
                         context.securityContextRepository(new RequestAttributeSecurityContextRepository())
                 )
                 .authorizeHttpRequests(auth -> auth
-                        // 🚀 Izinkan preflight CORS
                         .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
 
-                        .requestMatchers(
-                                "/auth/**",
-                                "/user/check-email",
-                                "/region/options",
-                                "/major/options",
-                                "/company",
-                                "/company/{companySlug}",
-                                "/category"
-                        ).permitAll()
+                        .requestMatchers(SecurityConstants.PUBLIC_PATHS).permitAll()
 
                         .anyRequest().authenticated()
                 )

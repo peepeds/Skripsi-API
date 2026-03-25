@@ -1,14 +1,12 @@
 package com.example.skripsi.services;
 
-import com.example.skripsi.entities.CompanyRequest;
-import com.example.skripsi.entities.UserNotification;
-import com.example.skripsi.exceptions.BadRequestExceptions;
-import com.example.skripsi.interfaces.IInboxService;
-import com.example.skripsi.models.PageResponse;
-import com.example.skripsi.models.inbox.InboxPreviewResponse;
-import com.example.skripsi.repositories.CompanyRequestRepository;
-import com.example.skripsi.repositories.UserNotificationRepository;
-import com.example.skripsi.securities.SecurityUtils;
+import com.example.skripsi.entities.*;
+import com.example.skripsi.exceptions.*;
+import com.example.skripsi.interfaces.*;
+import com.example.skripsi.models.*;
+import com.example.skripsi.models.inbox.*;
+import com.example.skripsi.repositories.*;
+import com.example.skripsi.securities.*;
 import jakarta.transaction.Transactional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;

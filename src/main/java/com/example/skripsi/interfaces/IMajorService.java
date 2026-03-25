@@ -1,9 +1,6 @@
 package com.example.skripsi.interfaces;
 
-import com.example.skripsi.models.major.CreateMajorRequest;
-import com.example.skripsi.models.major.MajorResponse;
-import com.example.skripsi.models.major.MajorOptionResponse;
-import com.example.skripsi.models.major.UpdateMajorRequest;
+import com.example.skripsi.models.major.*;
 
 import java.util.concurrent.CompletableFuture;
 

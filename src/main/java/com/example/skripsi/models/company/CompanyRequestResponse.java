@@ -1,6 +1,6 @@
 package com.example.skripsi.models.company;
 
-import com.example.skripsi.entities.CompanyRequestStatus;
+import com.example.skripsi.entities.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

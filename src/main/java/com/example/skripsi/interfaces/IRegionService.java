@@ -1,11 +1,7 @@
 package com.example.skripsi.interfaces;
 
-
-import com.example.skripsi.models.major.UpdateMajorRequest;
-import com.example.skripsi.models.region.CreateRegionRequest;
-import com.example.skripsi.models.region.RegionOptionResponse;
-import com.example.skripsi.models.region.RegionResponse;
-import com.example.skripsi.models.region.UpdateRegionRequest;
+import com.example.skripsi.models.major.*;
+import com.example.skripsi.models.region.*;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;

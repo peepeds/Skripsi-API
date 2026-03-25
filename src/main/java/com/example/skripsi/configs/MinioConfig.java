@@ -1,7 +1,9 @@
 package com.example.skripsi.configs;
 
+import io.minio.MinioClient;
 import lombok.Getter;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
 
 @Getter
@@ -17,4 +19,12 @@ public class MinioConfig {
     private String secretKey;
     @Value("${minio.bucketName}")
     private String bucketName;
+
+    @Bean
+    public MinioClient minioClient() {
+        return MinioClient.builder()
+                .endpoint(endpoint)
+                .credentials(accessKey, secretKey)
+                .build();
+    }
 }

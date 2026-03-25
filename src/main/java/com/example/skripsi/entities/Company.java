@@ -24,6 +24,12 @@ public class Company {
     @Column(name = "company_abbreviation")
     private String companyAbbreviation;
 
+    @Column(name = "company_slug")
+    private String companySlug;
+
+    @Column(name = "created_at")
+    private OffsetDateTime createdAt;
+
     @Column(name = "created_by")
     private Long createdBy;
 
@@ -32,8 +38,5 @@ public class Company {
 
     @Column(name = "updated_by")
     private Long updatedBy;
-
-    @Column(name = "company_slug")
-    private String companySlug;
 
 }

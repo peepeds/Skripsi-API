@@ -20,6 +20,9 @@ public class Category {
     @Column(name = "category_name")
     private String categoryName;
 
+    @Column(name = "category_type")
+    private String categoryType;
+
     @OneToMany(mappedBy = "category", fetch = FetchType.LAZY)
     private List<SubCategory> subCategories;
 }

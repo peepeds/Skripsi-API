@@ -1,7 +1,7 @@
 package com.example.skripsi.repositories;
 
-import com.example.skripsi.entities.Major;
-import com.example.skripsi.models.major.MajorOptionResponse;
+import com.example.skripsi.entities.*;
+import com.example.skripsi.models.major.*;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 

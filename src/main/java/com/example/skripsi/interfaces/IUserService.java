@@ -1,6 +1,6 @@
 package com.example.skripsi.interfaces;
 
-import com.example.skripsi.models.user.UserResponse;
+import com.example.skripsi.models.user.*;
 
 import java.util.List;
 

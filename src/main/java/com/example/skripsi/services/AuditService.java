@@ -1,15 +1,10 @@
 package com.example.skripsi.services;
 
-import com.example.skripsi.entities.AuditLog;
-import com.example.skripsi.exceptions.BadRequestExceptions;
-import com.example.skripsi.exceptions.CustomAccesDeniedExceptions;
-import com.example.skripsi.interfaces.IAuditService;
-import com.example.skripsi.models.audit.AuditLogResponse;
-import com.example.skripsi.repositories.AuditLogRepository;
-import com.example.skripsi.repositories.CompanyRequestRepository;
-import com.example.skripsi.repositories.NotificationRepository;
-import com.example.skripsi.repositories.RequestDocumentRepository;
-import com.example.skripsi.repositories.UserRepository;
+import com.example.skripsi.entities.*;
+import com.example.skripsi.exceptions.*;
+import com.example.skripsi.interfaces.*;
+import com.example.skripsi.models.audit.*;
+import com.example.skripsi.repositories.*;
 import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 
@@ -26,16 +21,16 @@ public class AuditService implements IAuditService {
     private final UserRepository userRepository;
     private final CompanyRequestRepository companyRequestRepository;
     private final NotificationRepository notificationRepository;
-    private final RequestDocumentRepository requestDocumentRepository;
+    private final UserCertificateRequestRepository userCertificateRequestRepository;
 
     public AuditService(AuditLogRepository auditLogRepository, UserRepository userRepository,
                         CompanyRequestRepository companyRequestRepository, NotificationRepository notificationRepository,
-                        RequestDocumentRepository requestDocumentRepository) {
+                        UserCertificateRequestRepository userCertificateRequestRepository) {
         this.auditLogRepository = auditLogRepository;
         this.userRepository = userRepository;
         this.companyRequestRepository = companyRequestRepository;
         this.notificationRepository = notificationRepository;
-        this.requestDocumentRepository = requestDocumentRepository;
+        this.userCertificateRequestRepository = userCertificateRequestRepository;
     }
 
     @Override
@@ -57,9 +52,9 @@ public class AuditService implements IAuditService {
         }
 
         if ("UPLOAD_CERTIFICATES".equals(entityUpper)) {
-            var requestDocument = requestDocumentRepository.findById(id)
+            var userCertificateRequest = userCertificateRequestRepository.findById(id)
                     .orElseThrow(() -> new BadRequestExceptions("Request document not found"));
-            if (!requestDocument.getCreatedBy().equals(currentUserId)) {
+            if (!userCertificateRequest.getCreatedBy().equals(currentUserId)) {
                 throw new CustomAccesDeniedExceptions("Access denied: you can only view audit logs for your own requests");
             }
         }

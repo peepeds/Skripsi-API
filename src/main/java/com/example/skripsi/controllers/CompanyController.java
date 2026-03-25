@@ -1,10 +1,9 @@
 package com.example.skripsi.controllers;
 
-import com.example.skripsi.entities.CompanyRequestStatus;
-import com.example.skripsi.interfaces.ICompanyService;
-import com.example.skripsi.models.WebResponse;
-import com.example.skripsi.models.company.CreateCompanyRequestRequest;
-import com.example.skripsi.models.company.ReviewCompanyRequestRequest;
+import com.example.skripsi.entities.*;
+import com.example.skripsi.interfaces.*;
+import com.example.skripsi.models.*;
+import com.example.skripsi.models.company.*;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -15,8 +14,8 @@ public class CompanyController {
 
     private final ICompanyService companyService;
 
-    public CompanyController(ICompanyService companyService){
-       this.companyService = companyService;
+    public CompanyController(ICompanyService companyService) {
+        this.companyService = companyService;
     }
 
     @GetMapping("")
@@ -93,11 +92,11 @@ public class CompanyController {
 
     @GetMapping("/{slug}")
     public WebResponse<?> getCompanyBySlug(@PathVariable String slug) {
-        // Return dummy data for now
+        var result = companyService.getCompanyBySlug(slug);
         return WebResponse.builder()
                 .success(true)
-                .message("Dummy company data for slug: " + slug)
-                .result(slug)
+                .message("Successfully get company profile")
+                .result(result)
                 .build();
     }
 }

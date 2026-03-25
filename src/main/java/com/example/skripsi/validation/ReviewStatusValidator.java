@@ -1,6 +1,6 @@
 package com.example.skripsi.validation;
 
-import com.example.skripsi.entities.CompanyRequestStatus;
+import com.example.skripsi.entities.*;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 

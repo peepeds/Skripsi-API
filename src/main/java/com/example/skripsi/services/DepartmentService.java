@@ -1,17 +1,12 @@
 package com.example.skripsi.services;
 
-import com.example.skripsi.entities.Department;
-import com.example.skripsi.entities.User;
-import com.example.skripsi.exceptions.BadRequestExceptions;
-import com.example.skripsi.interfaces.IDepartmentService;
-import com.example.skripsi.models.department.CreateDepartmentRequest;
-import com.example.skripsi.models.department.DepartmentResponse;
-import com.example.skripsi.models.department.UpdateDepartmentRequest;
-import com.example.skripsi.repositories.DepartmentRepository;
-import com.example.skripsi.repositories.UserRepository;
-import com.example.skripsi.securities.SecurityUtils;
+import com.example.skripsi.entities.*;
+import com.example.skripsi.exceptions.*;
+import com.example.skripsi.interfaces.*;
+import com.example.skripsi.models.department.*;
+import com.example.skripsi.repositories.*;
+import com.example.skripsi.securities.*;
 import jakarta.transaction.Transactional;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
@@ -84,8 +79,7 @@ public class DepartmentService implements IDepartmentService {
         return toResponse(savedDept);
     }
 
-    @Async("taskExecutor")
-    private DepartmentResponse toResponse(Department department){
+    private DepartmentResponse toResponse(Department department) {
 
         String createdByUser = userRepository.findByUserId(department.getCreatedBy())
                 .map(User::getFirstName)

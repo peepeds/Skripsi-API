@@ -1,7 +1,7 @@
 package com.example.skripsi.models.company;
 
-import com.example.skripsi.entities.CompanyRequestStatus;
-import com.example.skripsi.validation.ValidReviewStatus;
+import com.example.skripsi.entities.*;
+import com.example.skripsi.validation.*;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.*;

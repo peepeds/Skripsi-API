@@ -1,11 +1,8 @@
 package com.example.skripsi.controllers;
 
-import com.example.skripsi.models.WebResponse;
-import com.example.skripsi.models.user.CreateCertificateRequest;
-import com.example.skripsi.models.user.CertificateResponse;
-import com.example.skripsi.models.user.ReviewCertificateRequest;
-import com.example.skripsi.models.user.CertificateRequestDetailResponse;
-import com.example.skripsi.services.UserService;
+import com.example.skripsi.models.*;
+import com.example.skripsi.models.user.*;
+import com.example.skripsi.services.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;

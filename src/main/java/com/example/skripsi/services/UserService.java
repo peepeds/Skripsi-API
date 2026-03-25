@@ -1,23 +1,12 @@
 package com.example.skripsi.services;
 
-import com.example.skripsi.configs.MinioConfig;
+import com.example.skripsi.configs.*;
 import com.example.skripsi.entities.*;
-import com.example.skripsi.exceptions.CustomAccesDeniedExceptions;
-import com.example.skripsi.exceptions.InvalidCredentialsException;
-import com.example.skripsi.interfaces.IUserService;
-import com.example.skripsi.models.user.CreateCertificateRequest;
-import com.example.skripsi.models.user.CertificateResponse;
-import com.example.skripsi.models.user.ReviewCertificateRequest;
-import com.example.skripsi.models.user.CertificateRequestDetailResponse;
-import com.example.skripsi.models.user.UserResponse;
-import com.example.skripsi.models.user.CertificateUrlResponse;
-import com.example.skripsi.repositories.UserProfileRepository;
-import com.example.skripsi.repositories.UserRepository;
-import com.example.skripsi.repositories.NotificationRepository;
-import com.example.skripsi.repositories.UserNotificationRepository;
-import com.example.skripsi.repositories.RequestDocumentRepository;
-import com.example.skripsi.repositories.UserCertificatesRepository;
-import com.example.skripsi.securities.SecurityUtils;
+import com.example.skripsi.exceptions.*;
+import com.example.skripsi.interfaces.*;
+import com.example.skripsi.models.user.*;
+import com.example.skripsi.repositories.*;
+import com.example.skripsi.securities.*;
 import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 
@@ -35,7 +24,7 @@ public class UserService implements IUserService {
     private final SecurityUtils securityUtils;
     private final NotificationRepository notificationRepository;
     private final UserNotificationRepository userNotificationRepository;
-    private final RequestDocumentRepository requestDocumentRepository;
+    private final UserCertificateRequestRepository userCertificateRequestRepository;
     private final AuditService auditService;
     private final UserCertificatesRepository userCertificatesRepository;
     private final MinioConfig minioConfig;
@@ -45,7 +34,7 @@ public class UserService implements IUserService {
                        SecurityUtils securityUtils,
                        NotificationRepository notificationRepository,
                        UserNotificationRepository userNotificationRepository,
-                       RequestDocumentRepository requestDocumentRepository,
+                       UserCertificateRequestRepository userCertificateRequestRepository,
                        AuditService auditService,
                        UserCertificatesRepository userCertificatesRepository, MinioConfig minioConfig){
         this.userProfileRepository = userProfileRepository;
@@ -53,7 +42,7 @@ public class UserService implements IUserService {
         this.securityUtils = securityUtils;
         this.notificationRepository = notificationRepository;
         this.userNotificationRepository = userNotificationRepository;
-        this.requestDocumentRepository = requestDocumentRepository;
+        this.userCertificateRequestRepository = userCertificateRequestRepository;
         this.auditService = auditService;
         this.userCertificatesRepository = userCertificatesRepository;
         this.minioConfig = minioConfig;
@@ -221,8 +210,8 @@ public class UserService implements IUserService {
                 .build();
         userNotificationRepository.save(userNotification);
 
-        // Create request_document
-        RequestDocument requestDocument = RequestDocument.builder()
+        // Create user_certificate_request
+        UserCertificateRequest userCertificateRequest = UserCertificateRequest.builder()
                 .notification(savedNotification)
                 .documentName(request.getCertificateName())
                 .documentUrl(request.getCertificateUrl())
@@ -232,13 +221,13 @@ public class UserService implements IUserService {
                 .createdAt(OffsetDateTime.now())
                 .createdBy(userId)
                 .build();
-        requestDocumentRepository.save(requestDocument);
+        userCertificateRequestRepository.save(userCertificateRequest);
 
         // Update notification referenceId to documentId
-        savedNotification.setReferenceId(requestDocument.getDocumentId());
+        savedNotification.setReferenceId(userCertificateRequest.getDocumentId());
         notificationRepository.save(savedNotification);
 
-        auditService.record("UPLOAD_CERTIFICATES", requestDocument.getDocumentId(), "SUBMITTED", userId);
+        auditService.record("UPLOAD_CERTIFICATES", userCertificateRequest.getDocumentId(), "SUBMITTED", userId);
 
         return CertificateResponse.builder()
                 .userCertificateId(null) // belum ada
@@ -252,59 +241,59 @@ public class UserService implements IUserService {
     public CertificateResponse reviewCertificateRequest(Long requestId, ReviewCertificateRequest request) {
         Long reviewerId = securityUtils.getCurrentUserId();
 
-        RequestDocument requestDocument = requestDocumentRepository.findById(requestId)
+        UserCertificateRequest userCertificateRequest = userCertificateRequestRepository.findById(requestId)
                 .orElseThrow(() -> new InvalidCredentialsException("Request document not found"));
 
-        if (!"CERTIFICATE".equals(requestDocument.getDocumentType())) {
+        if (!"CERTIFICATE".equals(userCertificateRequest.getDocumentType())) {
             throw new InvalidCredentialsException("Invalid document type");
         }
 
         // Locking: prevent re-review if already finalized
-        if ("APPROVED".equals(requestDocument.getStatus()) || "REJECTED".equals(requestDocument.getStatus())) {
-            throw new InvalidCredentialsException("Certificate request has already been " + requestDocument.getStatus().toLowerCase() + " and cannot be changed");
+        if ("APPROVED".equals(userCertificateRequest.getStatus()) || "REJECTED".equals(userCertificateRequest.getStatus())) {
+            throw new InvalidCredentialsException("Certificate request has already been " + userCertificateRequest.getStatus().toLowerCase() + " and cannot be changed");
         }
 
         if ("APPROVED".equals(request.getStatus())) {
-            UserProfile userProfile = userProfileRepository.findById(requestDocument.getNotification().getReferenceId())
+            UserProfile userProfile = userProfileRepository.findById(userCertificateRequest.getNotification().getReferenceId())
                     .orElseThrow(() -> new InvalidCredentialsException("User profile not found"));
 
             UserCertificates userCertificate = UserCertificates.builder()
                     .userProfile(userProfile)
-                    .issuer(requestDocument.getDocumentName()) // assuming issuer is stored in documentName or need to adjust
-                    .certificatesUrl(requestDocument.getDocumentUrl())
+                    .issuer(userCertificateRequest.getDocumentName()) // assuming issuer is stored in documentName or need to adjust
+                    .certificatesUrl(userCertificateRequest.getDocumentUrl())
                     .createdAt(OffsetDateTime.now())
                     .updatedAt(OffsetDateTime.now())
                     .build();
             userCertificatesRepository.save(userCertificate);
         }
 
-        requestDocument.setStatus(request.getStatus());
-        requestDocument.setUploadedAt(OffsetDateTime.now());
-        requestDocumentRepository.save(requestDocument);
+        userCertificateRequest.setStatus(request.getStatus());
+        userCertificateRequest.setUploadedAt(OffsetDateTime.now());
+        userCertificateRequestRepository.save(userCertificateRequest);
 
         String actionLabel = "APPROVED".equals(request.getStatus()) ? "APPROVED" : "REJECTED";
 
         // Update the existing notification for the review action
-        Notification notification = requestDocument.getNotification();
+        Notification notification = userCertificateRequest.getNotification();
         notification.setAction(actionLabel);
         notification.setActorId(reviewerId);
         notification.setCreatedAt(OffsetDateTime.now());
         Notification savedReviewNotif = notificationRepository.save(notification);
 
         // Check if the user already has a UserNotification for this notification
-        boolean userNotifExists = userNotificationRepository.existsByUserIdAndNotification_NotificationId(requestDocument.getCreatedBy(), savedReviewNotif.getNotificationId());
+        boolean userNotifExists = userNotificationRepository.existsByUserIdAndNotification_NotificationId(userCertificateRequest.getCreatedBy(), savedReviewNotif.getNotificationId());
         if (!userNotifExists) {
             // Notify the original requester if not already notified
             UserNotification reviewUserNotif = UserNotification.builder()
                     .notification(savedReviewNotif)
-                    .userId(requestDocument.getCreatedBy())
+                    .userId(userCertificateRequest.getCreatedBy())
                     .isRead(false)
                     .createdAt(OffsetDateTime.now())
                     .build();
             userNotificationRepository.save(reviewUserNotif);
         } else {
             // Update the existing UserNotification's createdAt to reflect the latest action
-            UserNotification existingUserNotif = userNotificationRepository.findByUserIdAndNotification_NotificationId(requestDocument.getCreatedBy(), savedReviewNotif.getNotificationId());
+            UserNotification existingUserNotif = userNotificationRepository.findByUserIdAndNotification_NotificationId(userCertificateRequest.getCreatedBy(), savedReviewNotif.getNotificationId());
             if (existingUserNotif != null) {
                 existingUserNotif.setCreatedAt(OffsetDateTime.now());
                 userNotificationRepository.save(existingUserNotif);
@@ -315,8 +304,8 @@ public class UserService implements IUserService {
 
         return CertificateResponse.builder()
                 .userCertificateId(null)
-                .issuer(requestDocument.getDocumentName())
-                .certificatesUrl(requestDocument.getDocumentUrl())
+                .issuer(userCertificateRequest.getDocumentName())
+                .certificatesUrl(userCertificateRequest.getDocumentUrl())
                 .createdAt(OffsetDateTime.now())
                 .updatedAt(OffsetDateTime.now())
                 .build();
@@ -325,34 +314,34 @@ public class UserService implements IUserService {
     public CertificateRequestDetailResponse getCertificateRequestDetail(Long requestId) {
         Long currentUserId = securityUtils.getCurrentUserId();
 
-        RequestDocument requestDocument = requestDocumentRepository.findById(requestId)
+        UserCertificateRequest userCertificateRequest = userCertificateRequestRepository.findById(requestId)
                 .orElseThrow(() -> new InvalidCredentialsException("Request document not found"));
 
-        Notification notification = requestDocument.getNotification();
+        Notification notification = userCertificateRequest.getNotification();
 
         if (!"UPLOAD_CERTIFICATES".equals(notification.getType())) {
             throw new InvalidCredentialsException("Invalid notification type");
         }
 
         // Only the owner of the request may view its detail
-        if (!requestDocument.getCreatedBy().equals(currentUserId)) {
+        if (!userCertificateRequest.getCreatedBy().equals(currentUserId)) {
             throw new CustomAccesDeniedExceptions("Access denied: you can only view your own certificate requests");
         }
 
         return CertificateRequestDetailResponse.builder()
                 .requestDetails(CertificateRequestDetailResponse.RequestDetails.builder()
-                        .requestId(requestDocument.getDocumentId())
-                        .certificateName(requestDocument.getDocumentName())
-                        .certificatesUrl(requestDocument.getDocumentUrl())
-                        .fileSize(requestDocument.getFileSize())
-                        .submittedAt(requestDocument.getCreatedAt())
-                        .submittedBy(resolveUserName(requestDocument.getCreatedBy()))
+                        .requestId(userCertificateRequest.getDocumentId())
+                        .certificateName(userCertificateRequest.getDocumentName())
+                        .certificatesUrl(userCertificateRequest.getDocumentUrl())
+                        .fileSize(userCertificateRequest.getFileSize())
+                        .submittedAt(userCertificateRequest.getCreatedAt())
+                        .submittedBy(resolveUserName(userCertificateRequest.getCreatedBy()))
                         .build())
                 .reviewInformation(CertificateRequestDetailResponse.ReviewInformation.builder()
-                        .status(requestDocument.getStatus())
-                        .reviewedAt(requestDocument.getUploadedAt())
+                        .status(userCertificateRequest.getStatus())
+                        .reviewedAt(userCertificateRequest.getUploadedAt())
                         .reviewNote(null) // assuming no review note stored
-                        .reviewedBy(requestDocument.getUploadedAt() != null ? resolveUserName(notification.getActorId()) : null)
+                        .reviewedBy(userCertificateRequest.getUploadedAt() != null ? resolveUserName(notification.getActorId()) : null)
                         .build())
                 .build();
     }

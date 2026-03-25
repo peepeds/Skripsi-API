@@ -1,29 +1,12 @@
 package com.example.skripsi.services;
 
-import com.example.skripsi.entities.Company;
-import com.example.skripsi.entities.CompanyProfile;
-import com.example.skripsi.entities.CompanyRequest;
-import com.example.skripsi.entities.CompanyRequestStatus;
-import com.example.skripsi.entities.Notification;
-import com.example.skripsi.entities.User;
-import com.example.skripsi.entities.UserNotification;
-import com.example.skripsi.exceptions.BadRequestExceptions;
-import com.example.skripsi.exceptions.CustomAccesDeniedExceptions;
-import com.example.skripsi.interfaces.ICompanyService;
-import com.example.skripsi.models.PageResponse;
-import com.example.skripsi.models.company.CompanyOptionsResponse;
-import com.example.skripsi.models.company.CompanyRequestDetailResponse;
-import com.example.skripsi.models.company.CompanyRequestResponse;
-import com.example.skripsi.models.company.CreateCompanyRequestRequest;
-import com.example.skripsi.models.company.ReviewCompanyRequestRequest;
-import com.example.skripsi.repositories.CompanyRepository;
-import com.example.skripsi.repositories.CompanyProfileRepository;
-import com.example.skripsi.repositories.CompanyRequestRepository;
-import com.example.skripsi.repositories.NotificationRepository;
-import com.example.skripsi.repositories.RequestDocumentRepository;
-import com.example.skripsi.repositories.UserNotificationRepository;
-import com.example.skripsi.repositories.UserRepository;
-import com.example.skripsi.securities.SecurityUtils;
+import com.example.skripsi.entities.*;
+import com.example.skripsi.exceptions.*;
+import com.example.skripsi.interfaces.*;
+import com.example.skripsi.models.*;
+import com.example.skripsi.models.company.*;
+import com.example.skripsi.repositories.*;
+import com.example.skripsi.securities.*;
 import jakarta.transaction.Transactional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -42,7 +25,7 @@ public class CompanyService implements ICompanyService {
     private final CompanyRequestRepository companyRequestRepository;
     private final NotificationRepository notificationRepository;
     private final UserNotificationRepository userNotificationRepository;
-    private final RequestDocumentRepository documentRepository;
+    private final UserCertificateRequestRepository documentRepository;
     private final CompanyProfileRepository companyProfileRepository;
     private final AuditService auditService;
     private final SecurityUtils securityUtils;
@@ -52,7 +35,7 @@ public class CompanyService implements ICompanyService {
                           CompanyRequestRepository companyRequestRepository,
                           NotificationRepository notificationRepository,
                           UserNotificationRepository userNotificationRepository,
-                          RequestDocumentRepository documentRepository,
+                          UserCertificateRequestRepository documentRepository,
                           AuditService auditService,
                           SecurityUtils securityUtils,
                           UserRepository userRepository,
@@ -330,6 +313,29 @@ public class CompanyService implements ICompanyService {
     private String resolveUserName(Long userId) {
         if (userId == null) return null;
         return userRepository.findByUserId(userId).map(User::getFirstName).orElse(null);
+    }
+
+    @Override
+    public CompanyProfileDetailResponse getCompanyBySlug(String slug) {
+        Company company = companyRepository.findByCompanySlug(slug);
+        if (company == null) {
+            throw new BadRequestExceptions("Company not found");
+        }
+        CompanyProfile profile = companyProfileRepository.findByCompanyId(company.getCompanyId());
+        if (profile == null) {
+            throw new BadRequestExceptions("Company profile not found");
+        }
+        return CompanyProfileDetailResponse.builder()
+                .companyName(company.getCompanyName())
+                .companyAbbreviation(company.getCompanyAbbreviation())
+                .bio(profile.getBio())
+                .website(profile.getWebsite())
+                .isPartner(profile.getIsPartner())
+                .createdAt(profile.getCreatedAt())
+                .createdBy(profile.getCreatedBy())
+                .updatedAt(profile.getUpdatedAt())
+                .updatedBy(profile.getUpdatedBy())
+                .build();
     }
 
     private String generateAbbreviation(String companyName) {
