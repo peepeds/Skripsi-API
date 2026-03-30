@@ -7,92 +7,80 @@ import com.example.skripsi.models.region.*;
 import com.example.skripsi.repositories.*;
 import com.example.skripsi.securities.*;
 import jakarta.transaction.Transactional;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Map;
 
 @Service
 @Transactional
-public class RegionService implements IRegionService {
+public class RegionService extends AbstractMasterDataService<Region, RegionResponse, CreateRegionRequest, UpdateRegionRequest> implements IRegionService {
 
-    private final SecurityUtils securityUtils;
     private final RegionRepository regionRepository;
-    private final UserRepository userRepository;
 
     public RegionService(RegionRepository regionRepository,
                          UserRepository userRepository,
-                         SecurityUtils securityUtils){
+                         SecurityUtils securityUtils) {
+        super(regionRepository, userRepository, securityUtils);
         this.regionRepository = regionRepository;
-        this.userRepository = userRepository;
-        this.securityUtils = securityUtils;
     }
 
-    @Override
     public List<RegionResponse> getAllRegion() {
-        return regionRepository.findAll().stream()
-                .map(this::toResponse)
-                .collect(Collectors.toList());
+        return getAll();
     }
 
-    @Override
     public List<RegionOptionResponse> getAllRegionOptions() {
         return regionRepository.findAllRegionOptions();
     }
 
-    @Override
-    public RegionResponse createRegion(CreateRegionRequest createRegionRequest) {
-        Long userId = securityUtils.getCurrentUserId();
-        boolean isExists = regionRepository.existsByRegionNameIgnoreCase(createRegionRequest.getRegionName().trim());
+    public RegionResponse createRegion(CreateRegionRequest request) {
+        return create(request);
+    }
 
-        if(isExists){
+    public RegionResponse updateRegion(UpdateRegionRequest request, Integer regionId) {
+        return update(regionId, request);
+    }
+
+    @Override
+    protected void validateBeforeCreate(CreateRegionRequest request) {
+        boolean isExists = regionRepository.existsByRegionNameIgnoreCase(request.getRegionName().trim());
+        if (isExists) {
             throw new BadRequestExceptions("Region Name already exists!");
         }
+    }
 
-        Region region = Region.builder()
-                .regionName(createRegionRequest.getRegionName())
+    @Override
+    protected Region buildEntity(CreateRegionRequest request, Long userId) {
+        return Region.builder()
+                .regionName(request.getRegionName())
                 .createdAt(OffsetDateTime.now())
                 .createdBy(userId)
                 .active(true)
                 .build();
-        Region savedRegion = regionRepository.save(region);
-
-        return toResponse(savedRegion);
     }
 
-    @Async("taskExecutor")
     @Override
-    public RegionResponse updateRegion(UpdateRegionRequest updateRegionRequest, Integer regionId) {
-        Long userId = securityUtils.getCurrentUserId();
-        Region region = regionRepository.findById(regionId)
-                .orElseThrow(() -> new BadRequestExceptions("Major not found"));
-
-        if (updateRegionRequest.getRegionName() != null) {
-            region.setRegionName(updateRegionRequest.getRegionName());
+    protected void updateEntityFields(Region entity, UpdateRegionRequest request) {
+        if (request.getRegionName() != null) {
+            entity.setRegionName(request.getRegionName());
         }
-
-        if (updateRegionRequest.getActive() != null){
-            region.setActive(updateRegionRequest.getActive());
+        if (request.getActive() != null) {
+            entity.setActive(request.getActive());
         }
-
-        region.setUpdatedBy(userId);
-        region.setUpdatedAt(OffsetDateTime.now());
-
-        Region savedRegion = regionRepository.save(region);
-
-        return toResponse(savedRegion);
     }
 
-    private RegionResponse toResponse(Region region){
-        String createdByUser = userRepository.findByUserId(region.getCreatedBy())
-                .map(User::getFirstName)
-                .orElse(null);
+    @Override
+    protected Region setUpdateAuditFields(Region entity, Long userId) {
+        entity.setUpdatedBy(userId);
+        entity.setUpdatedAt(OffsetDateTime.now());
+        return entity;
+    }
 
-        String updatedByUser = userRepository.findByUserId(region.getUpdatedBy())
-                .map(User::getFirstName)
-                .orElse(null);
+    @Override
+    protected RegionResponse toResponse(Region region, Map<Long, User> userMap) {
+        String createdByUser = resolveUsername(region.getCreatedBy(), userMap);
+        String updatedByUser = resolveUsername(region.getUpdatedBy(), userMap);
 
         return RegionResponse.builder()
                 .regionId(region.getRegionId())
@@ -103,5 +91,10 @@ public class RegionService implements IRegionService {
                 .updatedBy(updatedByUser)
                 .active(region.getActive())
                 .build();
+    }
+
+    @Override
+    protected String getNotFoundErrorMessage() {
+        return "Region not found!";
     }
 }

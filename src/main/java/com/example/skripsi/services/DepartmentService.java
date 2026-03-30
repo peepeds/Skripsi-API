@@ -11,83 +11,72 @@ import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Map;
 
 @Service
 @Transactional
-public class DepartmentService implements IDepartmentService {
+public class DepartmentService extends AbstractMasterDataService<Department, DepartmentResponse, CreateDepartmentRequest, UpdateDepartmentRequest> implements IDepartmentService {
 
-    private final SecurityUtils securityUtils;
     private final DepartmentRepository departmentRepository;
-    private final UserRepository userRepository;
 
-    public DepartmentService(UserRepository userRepository,
-                             DepartmentRepository departmentRepository,
-                             SecurityUtils securityUtils){
+    public DepartmentService(DepartmentRepository departmentRepository,
+                             UserRepository userRepository,
+                             SecurityUtils securityUtils) {
+        super(departmentRepository, userRepository, securityUtils);
         this.departmentRepository = departmentRepository;
-        this.userRepository = userRepository;
-        this.securityUtils = securityUtils;
     }
 
-    @Override
     public List<DepartmentResponse> getAllDepartment() {
-        return departmentRepository.findAll().stream()
-                .map(this::toResponse)
-                .collect(Collectors.toList());
+        return getAll();
+    }
+
+    public DepartmentResponse createDepartment(CreateDepartmentRequest request) {
+        return create(request);
+    }
+
+    public DepartmentResponse updateDepartment(Integer deptId, UpdateDepartmentRequest request) {
+        return update(deptId, request);
     }
 
     @Override
-    public DepartmentResponse createDepartment(CreateDepartmentRequest createDepartmentRequest) {
-        Long userId = securityUtils.getCurrentUserId();
-        boolean isExists = departmentRepository.existsByDeptNameIgnoreCase(createDepartmentRequest.getDeptName().trim());
-
-        if (isExists){
+    protected void validateBeforeCreate(CreateDepartmentRequest request) {
+        boolean isExists = departmentRepository.existsByDeptNameIgnoreCase(request.getDeptName().trim());
+        if (isExists) {
             throw new BadRequestExceptions("Department Name already exists!");
         }
+    }
 
-        Department dept = Department.builder()
-                .deptName(createDepartmentRequest.getDeptName())
+    @Override
+    protected Department buildEntity(CreateDepartmentRequest request, Long userId) {
+        return Department.builder()
+                .deptName(request.getDeptName())
                 .createdAt(OffsetDateTime.now())
                 .createdBy(userId)
                 .active(true)
                 .build();
-
-        Department savedDept = departmentRepository.save(dept);
-
-        return toResponse(savedDept);
     }
 
     @Override
-    public DepartmentResponse updateDepartment(Integer deptId, UpdateDepartmentRequest updateDepartmentRequest) {
-        Long userId = securityUtils.getCurrentUserId();
-        Department dept = departmentRepository.findById(deptId)
-                .orElseThrow(() -> new BadRequestExceptions("Department not found!"));
-
-        if(updateDepartmentRequest.getDeptName() != null){
-            dept.setDeptName(updateDepartmentRequest.getDeptName());
+    protected void updateEntityFields(Department entity, UpdateDepartmentRequest request) {
+        if (request.getDeptName() != null) {
+            entity.setDeptName(request.getDeptName());
         }
-
-        if(updateDepartmentRequest.getActive() != null){
-            dept.setActive(updateDepartmentRequest.getActive());
+        if (request.getActive() != null) {
+            entity.setActive(request.getActive());
         }
-
-        dept.setUpdatedAt(OffsetDateTime.now());
-        dept.setUpdatedBy(userId);
-
-        Department savedDept = departmentRepository.save(dept);
-
-        return toResponse(savedDept);
     }
 
-    private DepartmentResponse toResponse(Department department) {
+    @Override
+    protected Department setUpdateAuditFields(Department entity, Long userId) {
+        entity.setUpdatedAt(OffsetDateTime.now());
+        entity.setUpdatedBy(userId);
+        return entity;
+    }
 
-        String createdByUser = userRepository.findByUserId(department.getCreatedBy())
-                .map(User::getFirstName)
-                .orElse(null);
-
-        String updatedByUser = userRepository.findByUserId(department.getUpdatedBy())
-                .map(User::getFirstName)
-                .orElse(null);
+    @Override
+    protected DepartmentResponse toResponse(Department department, Map<Long, User> userMap) {
+        String createdByUser = resolveUsername(department.getCreatedBy(), userMap);
+        String updatedByUser = resolveUsername(department.getUpdatedBy(), userMap);
 
         return DepartmentResponse.builder()
                 .deptId(department.getDeptId())
@@ -98,5 +87,10 @@ public class DepartmentService implements IDepartmentService {
                 .updatedBy(updatedByUser)
                 .active(department.getActive())
                 .build();
+    }
+
+    @Override
+    protected String getNotFoundErrorMessage() {
+        return "Department not found!";
     }
 }

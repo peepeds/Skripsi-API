@@ -21,4 +21,6 @@ public class CreateCompanyRequestRequest {
     private String website;
 
     private Boolean isPartner;
+
+    private Long subcategoryId;
 }

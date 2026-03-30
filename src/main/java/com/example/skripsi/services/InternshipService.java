@@ -3,6 +3,7 @@ package com.example.skripsi.services;
 import com.example.skripsi.entities.*;
 import com.example.skripsi.exceptions.*;
 import com.example.skripsi.repositories.*;
+import com.example.skripsi.interfaces.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,7 +12,7 @@ import java.util.Optional;
 
 @Service
 @Transactional
-public class InternshipService {
+public class InternshipService implements IInternshipService {
     private final InternshipHeaderRepository internshipHeaderRepository;
     private final InternshipDetailRepository internshipDetailRepository;
 

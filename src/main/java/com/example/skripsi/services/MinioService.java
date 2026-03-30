@@ -1,6 +1,7 @@
 package com.example.skripsi.services;
 
 import com.example.skripsi.configs.MinioConfig;
+import com.example.skripsi.interfaces.*;
 import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MinioClient;
 import io.minio.http.Method;
@@ -13,7 +14,7 @@ import java.util.Map;
 import java.util.UUID;
 
 @Service
-public class MinioService {
+public class MinioService implements IMinioService {
 
     private static final SecureRandom random = new SecureRandom();
     private final MinioClient minioClient;

@@ -3,6 +3,7 @@ package com.example.skripsi.services;
 import com.example.skripsi.entities.*;
 import com.example.skripsi.exceptions.*;
 import com.example.skripsi.repositories.*;
+import com.example.skripsi.interfaces.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -10,7 +11,7 @@ import java.util.List;
 
 @Service
 @Transactional
-public class RecruitmentService {
+public class RecruitmentService implements IRecruitmentService {
     private final RecruitmentStepRepository recruitmentStepRepository;
 
     public RecruitmentService(RecruitmentStepRepository recruitmentStepRepository) {

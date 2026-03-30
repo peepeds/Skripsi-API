@@ -1,69 +1,40 @@
 package com.example.skripsi.controllers;
 
-import com.example.skripsi.interfaces.*;
 import com.example.skripsi.models.*;
 import com.example.skripsi.models.major.*;
-import jakarta.validation.Valid;
-import org.springframework.security.access.prepost.PreAuthorize;
+import com.example.skripsi.services.MajorService;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("major")
-public class MajorController {
+public class MajorController extends AbstractMasterDataController<MajorService, MajorResponse, CreateMajorRequest, UpdateMajorRequest> {
 
-    private final IMajorService majorService;
-
-    public MajorController(IMajorService majorService){
-        this.majorService = majorService;
-    }
-
-    @GetMapping("")
-    @PreAuthorize("hasAnyRole('ADMIN')")
-    public WebResponse<Object> getAllMajor(){
-
-        var results = majorService.getAllMajor();
-
-        return  WebResponse.builder()
-                .success(true)
-                .message("successfully Get All Major")
-                .result(results)
-                .build();
-    }
-
-    @PostMapping("")
-    @PreAuthorize("hasAnyRole('ADMIN')")
-    public WebResponse<?> createMajor(@Valid @RequestBody CreateMajorRequest createMajorRequest){
-
-        var result =  majorService.createMajor(createMajorRequest);
-        return WebResponse.builder()
-                .success(true)
-                .message("Successfully Created New Major")
-                .result(result)
-                .build();
-    }
-
-    @PatchMapping("/{majorId}")
-    @PreAuthorize("hasAnyRole('ADMIN')")
-    public WebResponse<?> updateMajor(@Valid @RequestBody UpdateMajorRequest updateMajorRequest, @PathVariable Integer majorId){
-
-        var result = majorService.updateMajor(majorId, updateMajorRequest);
-
-        return WebResponse.builder()
-                .success(true)
-                .message("Successfully Updated Major")
-                .result(result)
-                .build();
+    public MajorController(MajorService majorService) {
+        super(majorService);
     }
 
     @GetMapping("/options")
-    public WebResponse<?>getAllMajorOptions(){
-
-        var results = majorService.getAllMajorOptions();
-
-        return  WebResponse.builder()
+    public WebResponse<?> getAllMajorOptions() {
+        var results = service.getAllMajorOptions();
+        return WebResponse.builder()
                 .success(true)
                 .message("Successfully Get Major")
                 .result(results)
                 .build();
+    }
+
+    @Override
+    protected String getGetAllMessage() {
+        return "successfully Get All Major";
+    }
+
+    @Override
+    protected String getCreateMessage() {
+        return "Successfully Created New Major";
+    }
+
+    @Override
+    protected String getUpdateMessage() {
+        return "Successfully Updated Major";
     }
 }

@@ -90,6 +90,16 @@ public class CompanyController {
                 .build();
     }
 
+    @GetMapping("/top-ratings")
+    public WebResponse<?> getTopCompaniesByAverage() {
+        var result = companyService.getTopCompaniesAvgRating();
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully get top 10 companies by rating")
+                .result(result)
+                .build();
+    }
+
     @GetMapping("/{slug}")
     public WebResponse<?> getCompanyBySlug(@PathVariable String slug) {
         var result = companyService.getCompanyBySlug(slug);

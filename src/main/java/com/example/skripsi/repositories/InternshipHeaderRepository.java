@@ -17,4 +17,7 @@ public interface InternshipHeaderRepository extends JpaRepository<InternshipHead
 
     @Query("SELECT DISTINCT ih.jobTitle FROM InternshipHeader ih WHERE LOWER(ih.jobTitle) LIKE LOWER(CONCAT('%', :query, '%')) ORDER BY ih.jobTitle")
     List<String> searchJobTitles(@Param("query") String query);
+
+    @Query("SELECT ih FROM InternshipHeader ih WHERE ih.internshipHeaderId IN :headerIds")
+    List<InternshipHeader> findByInternshipHeaderIds(@Param("headerIds") List<Long> headerIds);
 }

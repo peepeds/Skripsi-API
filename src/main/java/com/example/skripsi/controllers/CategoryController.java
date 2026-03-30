@@ -25,12 +25,13 @@ public class CategoryController {
                 .build();
     }
 
-    @GetMapping("/subcategory/{subCategoryId}/companies")
+    @GetMapping("/subcategory/{subCategoryName}/companies")
     public WebResponse<?> getCompaniesBySubCategory(
-            @PathVariable("subCategoryId") Long subCategoryId,
+            @PathVariable("subCategoryName") String subCategoryName,
+            @RequestParam(value = "type", defaultValue = "companies") String type,
             @RequestParam(value = "page", defaultValue = "0") int page,
             @RequestParam(value = "limit", defaultValue = "10") int limit) {
-        var result = categoryService.getCompaniesBySubCategory(subCategoryId, page, limit);
+        var result = categoryService.getCompaniesBySubCategoryName(subCategoryName, type, page, limit);
         return WebResponse.builder()
                 .success(true)
                 .message("Successfully Get Companies by SubCategory data")

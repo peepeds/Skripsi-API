@@ -27,6 +27,16 @@ public class ReviewController {
                 .build();
     }
 
+    @GetMapping("/recent")
+    public WebResponse<?> getRecentReviews() {
+        var result = reviewService.getRecentReviews();
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully retrieved recent reviews")
+                .result(result)
+                .build();
+    }
+
     @PostMapping("/{slug}")
     @PreAuthorize("isAuthenticated()")
     public WebResponse<?> submitReview(@PathVariable String slug, @Valid @RequestBody CreateReviewRequest request) {
@@ -34,6 +44,26 @@ public class ReviewController {
         return WebResponse.builder()
                 .success(true)
                 .message("Review submitted successfully")
+                .result(result)
+                .build();
+    }
+
+    @GetMapping("/{slug}/summary")
+    public WebResponse<?> getCompanySummary(@PathVariable String slug) {
+        var result = reviewService.getCompanySummary(slug);
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully retrieved company review summary")
+                .result(result)
+                .build();
+    }
+
+    @GetMapping("/{slug}")
+    public WebResponse<?> getCompanyReviews(@PathVariable String slug) {
+        var result = reviewService.getCompanyReviews(slug);
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully retrieved company reviews")
                 .result(result)
                 .build();
     }

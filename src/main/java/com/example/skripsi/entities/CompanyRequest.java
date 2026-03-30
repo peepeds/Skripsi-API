@@ -30,6 +30,9 @@ public class CompanyRequest {
     @Column(name = "is_partner")
     private Boolean isPartner;
 
+    @Column(name = "subcategory_id")
+    private Long subcategoryId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
     private CompanyRequestStatus status;
