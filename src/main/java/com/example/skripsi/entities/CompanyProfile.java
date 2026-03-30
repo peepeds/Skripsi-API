@@ -29,6 +29,9 @@ public class CompanyProfile {
     @Column(name = "is_partner")
     private Boolean isPartner;
 
+    @Column(name = "subcategory_id")
+    private Long subcategoryId;
+
     @Column(name = "created_at")
     private OffsetDateTime createdAt;
 

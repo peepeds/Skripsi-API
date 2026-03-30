@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Repository
@@ -23,18 +24,19 @@ public interface UserRepository extends JpaRepository<User,Long> {
         JOIN users cu ON cu.user_id = :userId
         JOIN user_profiles cup ON cup.user_id = cu.user_id
         JOIN majors cm ON cm.major_id = cup.major_id
-        WHERE 
-            CASE 
+        WHERE
+            CASE
                 WHEN :userPrivilege = 'all' THEN TRUE
                 WHEN :userPrivilege = 'cross_dept' THEN m.dept_id = cm.dept_id
                 WHEN :userPrivilege = 'dept' THEN m.dept_id = cm.dept_id AND m.region_id = cm.region_id
-                WHEN :userPrivilege = 'major' THEN 
-                    m.region_id = cm.region_id 
+                WHEN :userPrivilege = 'major' THEN
+                    m.region_id = cm.region_id
                     AND m.major_id = cm.major_id
                 ELSE FALSE
             END
     """, nativeQuery = true)
     List<User> getUserByUserPrivilege(@Param("userPrivilege") String userPrivilege, @Param("userId") Long userId);
 
-
+    @Query("SELECT u FROM User u WHERE u.userId IN :userIds")
+    Map<Long, User> findByUserIdMap(@Param("userIds") List<Long> userIds);
 }

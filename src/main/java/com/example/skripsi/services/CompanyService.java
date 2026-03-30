@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -30,6 +31,8 @@ public class CompanyService implements ICompanyService {
     private final AuditService auditService;
     private final SecurityUtils securityUtils;
     private final UserRepository userRepository;
+    private final SubCategoryRepository subCategoryRepository;
+    private final InternshipDetailRepository internshipDetailRepository;
 
     public CompanyService(CompanyRepository companyRepository,
                           CompanyRequestRepository companyRequestRepository,
@@ -39,7 +42,9 @@ public class CompanyService implements ICompanyService {
                           AuditService auditService,
                           SecurityUtils securityUtils,
                           UserRepository userRepository,
-                          CompanyProfileRepository companyProfileRepository) {
+                          CompanyProfileRepository companyProfileRepository,
+                          SubCategoryRepository subCategoryRepository,
+                          InternshipDetailRepository internshipDetailRepository) {
         this.companyRepository = companyRepository;
         this.companyRequestRepository = companyRequestRepository;
         this.notificationRepository = notificationRepository;
@@ -49,6 +54,8 @@ public class CompanyService implements ICompanyService {
         this.securityUtils = securityUtils;
         this.userRepository = userRepository;
         this.companyProfileRepository = companyProfileRepository;
+        this.subCategoryRepository = subCategoryRepository;
+        this.internshipDetailRepository = internshipDetailRepository;
     }
 
     @Override
@@ -59,10 +66,57 @@ public class CompanyService implements ICompanyService {
             throw new BadRequestExceptions("limit exceeded");
         }
         Pageable pageable = PageRequest.of(page, limit);
-        Page<CompanyOptionsResponse> pageResult = companyRepository.findAll(pageable).map(this::toOptionsResponse);
-        long cappedTotalElements = Math.min(pageResult.getTotalElements(), MAX_TOTAL_ELEMENTS);
+        Page<Company> companies = companyRepository.findAll(pageable);
+
+        List<Long> companyIds = companies.getContent().stream()
+                .map(Company::getCompanyId)
+                .collect(Collectors.toList());
+
+        final java.util.Map<Long, Double> ratingMap = new java.util.HashMap<>();
+        final java.util.Map<Long, Long> reviewCountMap = new java.util.HashMap<>();
+        final java.util.Map<Long, CompanyProfile> profileMap = new java.util.HashMap<>();
+        final java.util.Map<Long, SubCategory> subcategoryMap = new java.util.HashMap<>();
+
+        if (!companyIds.isEmpty()) {
+            List<Object[]> ratings = internshipDetailRepository.findAverageRatingsByCompanyIds(companyIds);
+            for (Object[] row : ratings) {
+                Long companyId = ((Number) row[0]).longValue();
+                Double avgRating = row[1] != null ? ((Number) row[1]).doubleValue() : null;
+                ratingMap.put(companyId, avgRating);
+            }
+
+            List<Object[]> reviewCountData = internshipDetailRepository.findReviewCountsByCompanyIds(companyIds);
+            for (Object[] row : reviewCountData) {
+                Long companyId = ((Number) row[0]).longValue();
+                Long reviewCount = ((Number) row[1]).longValue();
+                reviewCountMap.put(companyId, reviewCount);
+            }
+
+            List<CompanyProfile> profiles = companyProfileRepository.findByCompanyIds(companyIds);
+            for (CompanyProfile profile : profiles) {
+                profileMap.put(profile.getCompanyId(), profile);
+            }
+
+            List<Long> subcategoryIds = profiles.stream()
+                    .map(CompanyProfile::getSubcategoryId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+
+            if (!subcategoryIds.isEmpty()) {
+                List<SubCategory> subCategories = subCategoryRepository.findBySubCategoryIds(subcategoryIds);
+                for (SubCategory subCat : subCategories) {
+                    subcategoryMap.put(subCat.getSubCategoryId(), subCat);
+                }
+            }
+        }
+
+        List<CompanyOptionsResponse> results = companies.getContent().stream()
+                .map(company -> toOptionsResponse(company, ratingMap.get(company.getCompanyId()), reviewCountMap.get(company.getCompanyId()), profileMap, subcategoryMap))
+                .collect(Collectors.toList());
+
+        long cappedTotalElements = Math.min(companies.getTotalElements(), MAX_TOTAL_ELEMENTS);
         return PageResponse.<CompanyOptionsResponse>builder()
-                .result(pageResult.getContent())
+                .result(results)
                 .meta(PageResponse.Meta.builder()
                         .page(page).size(limit)
                         .totalElements(cappedTotalElements)
@@ -168,6 +222,7 @@ public class CompanyService implements ICompanyService {
                     .website(companyRequest.getWebsite())
                     .bio("")
                     .isPartner(false)
+                    .subcategoryId(companyRequest.getSubcategoryId())
                     .createdAt(OffsetDateTime.now())
                     .createdBy(reviewerId)
                     .build());
@@ -236,7 +291,128 @@ public class CompanyService implements ICompanyService {
 
     @Override
     public List<CompanyOptionsResponse> searchCompanies(String search) {
-        return companyRepository.searchCompanies(search);
+        List<CompanyOptionsResponse> searchResults = companyRepository.searchCompanies(search);
+
+        if (searchResults.isEmpty()) {
+            return searchResults;
+        }
+
+        List<Long> companyIds = searchResults.stream()
+                .map(CompanyOptionsResponse::getCompanyId)
+                .collect(Collectors.toList());
+
+        final java.util.Map<Long, Double> ratingMap = new java.util.HashMap<>();
+        final java.util.Map<Long, Long> reviewCountMap = new java.util.HashMap<>();
+        final java.util.Map<Long, CompanyProfile> profileMap = new java.util.HashMap<>();
+        final java.util.Map<Long, SubCategory> subcategoryMap = new java.util.HashMap<>();
+
+        List<Object[]> ratings = internshipDetailRepository.findAverageRatingsByCompanyIds(companyIds);
+        for (Object[] row : ratings) {
+            Long companyId = ((Number) row[0]).longValue();
+            Double avgRating = row[1] != null ? ((Number) row[1]).doubleValue() : null;
+            ratingMap.put(companyId, avgRating);
+        }
+
+        List<Object[]> reviewCountData = internshipDetailRepository.findReviewCountsByCompanyIds(companyIds);
+        for (Object[] row : reviewCountData) {
+            Long companyId = ((Number) row[0]).longValue();
+            Long reviewCount = ((Number) row[1]).longValue();
+            reviewCountMap.put(companyId, reviewCount);
+        }
+
+        List<CompanyProfile> profiles = companyProfileRepository.findByCompanyIds(companyIds);
+        for (CompanyProfile profile : profiles) {
+            profileMap.put(profile.getCompanyId(), profile);
+        }
+
+        List<Long> subcategoryIds = profiles.stream()
+                .map(CompanyProfile::getSubcategoryId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+        if (!subcategoryIds.isEmpty()) {
+            List<SubCategory> subCategories = subCategoryRepository.findBySubCategoryIds(subcategoryIds);
+            for (SubCategory subCat : subCategories) {
+                subcategoryMap.put(subCat.getSubCategoryId(), subCat);
+            }
+        }
+
+        List<Company> companies = companyRepository.findAllById(companyIds);
+        java.util.Map<Long, Company> companyMap = new java.util.HashMap<>();
+        for (Company company : companies) {
+            companyMap.put(company.getCompanyId(), company);
+        }
+
+        return searchResults.stream()
+                .map(result -> {
+                    Company company = companyMap.get(result.getCompanyId());
+                    if (company == null) {
+                        return result;
+                    }
+                    return toOptionsResponse(company, ratingMap.get(company.getCompanyId()), reviewCountMap.get(company.getCompanyId()), profileMap, subcategoryMap);
+                })
+                .collect(Collectors.toList());
+    }
+
+    public List<CompanyOptionsResponse> getTopCompaniesAvgRating() {
+        List<Object[]> topCompanies = internshipDetailRepository.findTop10CompaniesByAverageRating();
+
+        if (topCompanies.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> companyIds = topCompanies.stream()
+                .map(row -> ((Number) row[0]).longValue())
+                .collect(Collectors.toList());
+
+        final java.util.Map<Long, Double> ratingMap = new java.util.HashMap<>();
+        final java.util.Map<Long, Long> reviewCountMap = new java.util.HashMap<>();
+        final java.util.Map<Long, CompanyProfile> profileMap = new java.util.HashMap<>();
+        final java.util.Map<Long, SubCategory> subcategoryMap = new java.util.HashMap<>();
+
+        for (Object[] row : topCompanies) {
+            Long companyId = ((Number) row[0]).longValue();
+            Double avgRating = row[1] != null ? ((Number) row[1]).doubleValue() : null;
+            ratingMap.put(companyId, avgRating);
+        }
+
+        List<Object[]> reviewCountData = internshipDetailRepository.findReviewCountsByCompanyIds(companyIds);
+        for (Object[] row : reviewCountData) {
+            Long companyId = ((Number) row[0]).longValue();
+            Long reviewCount = ((Number) row[1]).longValue();
+            reviewCountMap.put(companyId, reviewCount);
+        }
+
+        List<CompanyProfile> profiles = companyProfileRepository.findByCompanyIds(companyIds);
+        for (CompanyProfile profile : profiles) {
+            profileMap.put(profile.getCompanyId(), profile);
+        }
+
+        List<Long> subcategoryIds = profiles.stream()
+                .map(CompanyProfile::getSubcategoryId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+        if (!subcategoryIds.isEmpty()) {
+            List<SubCategory> subCategories = subCategoryRepository.findBySubCategoryIds(subcategoryIds);
+            for (SubCategory subCat : subCategories) {
+                subcategoryMap.put(subCat.getSubCategoryId(), subCat);
+            }
+        }
+
+        List<Company> companies = companyRepository.findAllById(companyIds);
+        java.util.Map<Long, Company> companyMap = companies.stream()
+                .collect(Collectors.toMap(Company::getCompanyId, c -> c));
+
+        return topCompanies.stream()
+                .map(row -> {
+                    Long companyId = ((Number) row[0]).longValue();
+                    Company company = companyMap.get(companyId);
+                    if (company == null) return null;
+                    return toOptionsResponse(company, ratingMap.get(companyId), reviewCountMap.get(companyId), profileMap, subcategoryMap);
+                })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
     }
 
     private int calculateTotalPages(long totalElements, int limit) {
@@ -247,15 +423,25 @@ public class CompanyService implements ICompanyService {
         return (long) (page + 1) * limit < totalElements;
     }
 
-    private CompanyOptionsResponse toOptionsResponse(Company company) {
-        CompanyProfile profile = companyProfileRepository.findByCompanyId(company.getCompanyId());
+    private CompanyOptionsResponse toOptionsResponse(Company company, Double rating, Long totalReviews, java.util.Map<Long, CompanyProfile> profileMap, java.util.Map<Long, SubCategory> subcategoryMap) {
+        CompanyProfile profile = profileMap.get(company.getCompanyId());
+        String subcategoryName = null;
+
+        if (profile != null && profile.getSubcategoryId() != null) {
+            SubCategory subCategory = subcategoryMap.get(profile.getSubcategoryId());
+            subcategoryName = subCategory != null ? subCategory.getSubCategoryName() : null;
+        }
+
         return CompanyOptionsResponse.builder()
                 .companyId(company.getCompanyId())
                 .companyName(company.getCompanyName())
                 .companyAbbreviation(company.getCompanyAbbreviation())
                 .website(profile != null ? profile.getWebsite() : null)
                 .isPartner(profile != null ? profile.getIsPartner() : null)
+                .subcategoryName(subcategoryName)
                 .companySlug(company.getCompanySlug())
+                .rating(rating)
+                .totalReviews(totalReviews != null ? totalReviews : 0L)
                 .build();
     }
 
@@ -266,6 +452,7 @@ public class CompanyService implements ICompanyService {
                 .companyAbbreviation(companyRequest.getCompanyAbbreviation())
                 .website(companyRequest.getWebsite())
                 .isPartner(companyRequest.getIsPartner())
+                .subcategoryId(companyRequest.getSubcategoryId())
                 .status(companyRequest.getStatus())
                 .createdAt(companyRequest.getCreatedAt())
                 .createdBy(resolveUserName(companyRequest.getCreatedBy()))
@@ -296,6 +483,7 @@ public class CompanyService implements ICompanyService {
                         .companyName(companyRequest.getCompanyName())
                         .companyAbbreviation(companyRequest.getCompanyAbbreviation())
                         .website(companyRequest.getWebsite())
+                        .subcategoryId(companyRequest.getSubcategoryId())
                         .submittedBy(submittedBy)
                         .submittedAt(companyRequest.getCreatedAt())
                         .documents(documents)
@@ -316,25 +504,51 @@ public class CompanyService implements ICompanyService {
     }
 
     @Override
-    public CompanyProfileDetailResponse getCompanyBySlug(String slug) {
+    public CompanyOptionsResponse getCompanyBySlug(String slug) {
         Company company = companyRepository.findByCompanySlug(slug);
         if (company == null) {
             throw new BadRequestExceptions("Company not found");
         }
+
         CompanyProfile profile = companyProfileRepository.findByCompanyId(company.getCompanyId());
         if (profile == null) {
             throw new BadRequestExceptions("Company profile not found");
         }
-        return CompanyProfileDetailResponse.builder()
+
+        String subcategoryName = null;
+        if (profile.getSubcategoryId() != null) {
+            SubCategory subCategory = subCategoryRepository.findById(profile.getSubcategoryId()).orElse(null);
+            subcategoryName = subCategory != null ? subCategory.getSubCategoryName() : null;
+        }
+
+        Double rating = null;
+        Long totalReviews = 0L;
+
+        List<Object[]> ratingData = internshipDetailRepository.findAverageRatingsByCompanyIds(
+                java.util.Collections.singletonList(company.getCompanyId())
+        );
+        if (!ratingData.isEmpty()) {
+            rating = ((Number) ratingData.get(0)[1]).doubleValue();
+        }
+
+        List<Object[]> reviewCountData = internshipDetailRepository.findReviewCountsByCompanyIds(
+                java.util.Collections.singletonList(company.getCompanyId())
+        );
+        if (!reviewCountData.isEmpty()) {
+            Object[] row = reviewCountData.get(0);
+            totalReviews = ((Number) row[1]).longValue();
+        }
+
+        return CompanyOptionsResponse.builder()
+                .companyId(company.getCompanyId())
                 .companyName(company.getCompanyName())
                 .companyAbbreviation(company.getCompanyAbbreviation())
-                .bio(profile.getBio())
                 .website(profile.getWebsite())
                 .isPartner(profile.getIsPartner())
-                .createdAt(profile.getCreatedAt())
-                .createdBy(profile.getCreatedBy())
-                .updatedAt(profile.getUpdatedAt())
-                .updatedBy(profile.getUpdatedBy())
+                .subcategoryName(subcategoryName)
+                .companySlug(company.getCompanySlug())
+                .rating(rating)
+                .totalReviews(totalReviews)
                 .build();
     }
 

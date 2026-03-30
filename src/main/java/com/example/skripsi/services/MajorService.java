@@ -7,39 +7,33 @@ import com.example.skripsi.models.major.*;
 import com.example.skripsi.repositories.*;
 import com.example.skripsi.securities.*;
 import jakarta.transaction.Transactional;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Map;
 
 @Service
 @Transactional
-public class MajorService implements IMajorService {
+public class MajorService extends AbstractMasterDataService<Major, MajorResponse, CreateMajorRequest, UpdateMajorRequest> implements IMajorService {
 
-    private final SecurityUtils securityUtils;
     private final MajorRepository majorRepository;
     private final RegionRepository regionRepository;
     private final DepartmentRepository departmentRepository;
-    private final UserRepository userRepository;
 
     public MajorService(MajorRepository majorRepository,
                         DepartmentRepository departmentRepository,
                         RegionRepository regionRepository,
                         UserRepository userRepository,
-                        SecurityUtils securityUtils){
+                        SecurityUtils securityUtils) {
+        super(majorRepository, userRepository, securityUtils);
         this.majorRepository = majorRepository;
         this.departmentRepository = departmentRepository;
         this.regionRepository = regionRepository;
-        this.userRepository = userRepository;
-        this.securityUtils = securityUtils;
     }
 
     public List<MajorResponse> getAllMajor() {
-        return majorRepository.findAll().stream()
-                .map(this::toResponse)
-                .collect(Collectors.toList());
+        return getAll();
     }
 
     @Override
@@ -47,78 +41,80 @@ public class MajorService implements IMajorService {
         return majorRepository.findAllOptions();
     }
 
-    public MajorResponse createMajor(CreateMajorRequest createMajorRequest) {
-        Long userId = securityUtils.getCurrentUserId();
-        boolean isExists = majorRepository.existsByMajorNameIgnoreCase(createMajorRequest.getMajorName().trim());
+    public MajorResponse createMajor(CreateMajorRequest request) {
+        return create(request);
+    }
 
-        if(isExists){
+    public MajorResponse updateMajor(Integer majorId, UpdateMajorRequest request) {
+        return update(majorId, request);
+    }
+
+    @Override
+    protected void validateBeforeCreate(CreateMajorRequest request) {
+        boolean isExists = majorRepository.existsByMajorNameIgnoreCase(request.getMajorName().trim());
+        if (isExists) {
             throw new BadRequestExceptions("Major Name already exists!");
         }
-
-        Region region = regionRepository.findById(createMajorRequest.getRegionId())
+        
+        regionRepository.findById(request.getRegionId())
                 .orElseThrow(() -> new ResourceNotFoundException("Region not found"));
+        
+        departmentRepository.findById(request.getDeptId())
+                .orElseThrow(() -> new ResourceNotFoundException("Department not found"));
+    }
 
-        Department department = departmentRepository.findById(createMajorRequest.getDeptId())
+    @Override
+    protected Major buildEntity(CreateMajorRequest request, Long userId) {
+        Region region = regionRepository.findById(request.getRegionId())
+                .orElseThrow(() -> new ResourceNotFoundException("Region not found"));
+        
+        Department department = departmentRepository.findById(request.getDeptId())
                 .orElseThrow(() -> new ResourceNotFoundException("Department not found"));
 
-        Major major = Major.builder()
-                .majorName(createMajorRequest.getMajorName())
+        return Major.builder()
+                .majorName(request.getMajorName())
                 .region(region)
                 .department(department)
                 .createdBy(userId)
                 .createdAt(OffsetDateTime.now())
                 .active(true)
                 .build();
-
-        Major savedMajor = majorRepository.save(major);
-
-        return toResponse(savedMajor);
     }
 
-    @Async("taskExecutor")
     @Override
-    public MajorResponse updateMajor(Integer majorId, UpdateMajorRequest updateMajorRequest) {
-        Long userId = securityUtils.getCurrentUserId();
-        Major major = majorRepository.findById(majorId)
-                .orElseThrow(() -> new BadRequestExceptions("Major not found"));
-
-        if (updateMajorRequest.getMajorName() != null) {
-            major.setMajorName(updateMajorRequest.getMajorName());
+    protected void updateEntityFields(Major entity, UpdateMajorRequest request) {
+        if (request.getMajorName() != null) {
+            entity.setMajorName(request.getMajorName());
         }
-
-        if (updateMajorRequest.getRegionId() != null) {
-            Region region = regionRepository.findById(updateMajorRequest.getRegionId())
+        
+        if (request.getRegionId() != null) {
+            Region region = regionRepository.findById(request.getRegionId())
                     .orElseThrow(() -> new BadRequestExceptions("Region not found"));
-            major.setRegion(region);
+            entity.setRegion(region);
         }
-
-        if (updateMajorRequest.getDeptId() != null) {
-            Department department = departmentRepository.findById(updateMajorRequest.getDeptId())
+        
+        if (request.getDeptId() != null) {
+            Department department = departmentRepository.findById(request.getDeptId())
                     .orElseThrow(() -> new BadRequestExceptions("Department not found"));
-            major.setDepartment(department);
+            entity.setDepartment(department);
         }
-
-        if (updateMajorRequest.getActive() != null) {
-            major.setActive(updateMajorRequest.getActive());
+        
+        if (request.getActive() != null) {
+            entity.setActive(request.getActive());
         }
-
-        major.setUpdatedBy(userId);
-        major.setUpdatedAt(OffsetDateTime.now());
-
-        Major savedMajor = majorRepository.save(major);
-
-        return toResponse(savedMajor);
     }
 
-    private MajorResponse toResponse(Major major){
+    @Override
+    protected Major setUpdateAuditFields(Major entity, Long userId) {
+        entity.setUpdatedBy(userId);
+        entity.setUpdatedAt(OffsetDateTime.now());
+        return entity;
+    }
 
-        String createdByUser = userRepository.findByUserId(major.getCreatedBy())
-                .map(User::getFirstName)
-                .orElse(null);
-
-        String updatedByUser = userRepository.findByUserId(major.getUpdatedBy())
-                .map(User::getFirstName)
-                .orElse(null);
+    @Override
+    protected MajorResponse toResponse(Major major, Map<Long, User> userMap) {
+        String createdByUser = resolveUsername(major.getCreatedBy(), userMap);
+        String updatedByUser = resolveUsername(major.getUpdatedBy(), userMap);
 
         return MajorResponse.builder()
                 .majorId(major.getMajorId())
@@ -131,5 +127,10 @@ public class MajorService implements IMajorService {
                 .updatedBy(updatedByUser)
                 .active(major.getActive())
                 .build();
+    }
+
+    @Override
+    protected String getNotFoundErrorMessage() {
+        return "Major not found!";
     }
 }

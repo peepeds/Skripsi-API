@@ -16,6 +16,7 @@ public class CompanyProfileDetailResponse {
     private String bio;
     private String website;
     private Boolean isPartner;
+    private Long subcategoryId;
     private OffsetDateTime createdAt;
     private Long createdBy;
     private OffsetDateTime updatedAt;

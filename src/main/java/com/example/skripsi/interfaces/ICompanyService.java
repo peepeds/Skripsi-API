@@ -9,7 +9,7 @@ import java.util.List;
 public interface ICompanyService {
     PageResponse<CompanyOptionsResponse> getCompany(int page, int limit);
 
-    CompanyProfileDetailResponse getCompanyBySlug(String slug);
+    CompanyOptionsResponse getCompanyBySlug(String slug);
 
     CompanyRequestResponse submitCompanyRequest(CreateCompanyRequestRequest request);
 
@@ -20,4 +20,6 @@ public interface ICompanyService {
     CompanyRequestDetailResponse getCompanyRequestDetail(Long requestId);
 
     List<CompanyOptionsResponse> searchCompanies(String search);
+
+    List<CompanyOptionsResponse> getTopCompaniesAvgRating();
 }

@@ -18,6 +18,7 @@ public class CompanyRequestResponse {
     private String companyAbbreviation;
     private String website;
     private Boolean isPartner;
+    private Long subcategoryId;
     private CompanyRequestStatus status;
     private OffsetDateTime createdAt;
     private String createdBy;

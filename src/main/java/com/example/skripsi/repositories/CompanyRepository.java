@@ -63,4 +63,39 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
             @Param("subCategoryId") Long subCategoryId,
             Pageable pageable
     );
+
+    @Query("""
+        SELECT DISTINCT new com.example.skripsi.models.company.CompanyOptionsResponse(
+            c.companyId,
+            c.companyName,
+            c.companyAbbreviation,
+            c.companySlug
+        )
+        FROM Company c
+        JOIN CompanyProfile cp ON cp.companyId = c.companyId
+        WHERE cp.subcategoryId = :subCategoryId
+        ORDER BY c.companyName ASC
+    """)
+    Page<CompanyOptionsResponse> findCompaniesBySubCategoryIdViaProfile(
+            @Param("subCategoryId") Long subCategoryId,
+            Pageable pageable
+    );
+
+    @Query("""
+        SELECT DISTINCT new com.example.skripsi.models.company.CompanyOptionsResponse(
+            c.companyId,
+            c.companyName,
+            c.companyAbbreviation,
+            c.companySlug
+        )
+        FROM Company c
+        JOIN CompanyProfile cp ON cp.companyId = c.companyId
+        JOIN SubCategory sc ON sc.subCategoryId = cp.subcategoryId
+        WHERE LOWER(sc.subCategoryName) = LOWER(:subCategoryName)
+        ORDER BY c.companyName ASC
+    """)
+    Page<CompanyOptionsResponse> findCompaniesBySubCategoryNameViaProfile(
+            @Param("subCategoryName") String subCategoryName,
+            Pageable pageable
+    );
 }
