@@ -5,27 +5,27 @@ import com.example.skripsi.exceptions.BadRequestExceptions;
 import com.example.skripsi.models.category.*;
 import com.example.skripsi.models.company.*;
 import com.example.skripsi.models.*;
+import com.example.skripsi.models.constant.*;
 import com.example.skripsi.repositories.*;
 import com.example.skripsi.interfaces.*;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
 public class CategoryService implements ICategoryService {
     private final CategoryRepository categoryRepository;
-    private final CompanyRepository companyRepository;
     private final SubCategoryRepository subCategoryRepository;
+    private final ICompanyService companyService;
 
     public CategoryService(CategoryRepository categoryRepository,
-                          CompanyRepository companyRepository,
-                          SubCategoryRepository subCategoryRepository) {
+                          SubCategoryRepository subCategoryRepository,
+                          @Lazy ICompanyService companyService) {
         this.categoryRepository = categoryRepository;
-        this.companyRepository = companyRepository;
         this.subCategoryRepository = subCategoryRepository;
+        this.companyService = companyService;
     }
 
     public List<Category> getCategories(boolean includeSubCategories) {
@@ -72,87 +72,55 @@ public class CategoryService implements ICategoryService {
                 .build();
     }
 
-    public PageResponse<CompanyOptionsResponse> getCompaniesBySubCategory(Long subCategoryId, int page, int limit) {
-        final int MAX_TOTAL_ELEMENTS = 1000;
-        int requestedOffset = page * limit;
-        if (requestedOffset >= MAX_TOTAL_ELEMENTS) {
-            throw new RuntimeException("limit exceeded");
-        }
-        Pageable pageable = PageRequest.of(page, limit);
-        Page<CompanyOptionsResponse> pageResult = companyRepository.findCompaniesBySubCategoryId(subCategoryId, pageable);
-        long cappedTotalElements = Math.min(pageResult.getTotalElements(), MAX_TOTAL_ELEMENTS);
-        return PageResponse.<CompanyOptionsResponse>builder()
-                .result(pageResult.getContent())
-                .meta(PageResponse.Meta.builder()
-                        .page(page).size(limit)
-                        .totalElements(cappedTotalElements)
-                        .totalPages(calculateTotalPages(cappedTotalElements, limit))
-                        .hasNext(hasNextPage(page, limit, cappedTotalElements))
-                        .hasPrevious(page > 0)
-                        .build())
-                .build();
+    public CursorPageResponse<CompanyOptionsResponse> getCompaniesBySubCategory(Long subCategoryId, Long cursor, int limit) {
+        return companyService.getCompaniesBySubCategoryId(subCategoryId, cursor, limit);
     }
 
-    private int calculateTotalPages(long totalElements, int limit) {
-        return (int) Math.ceil((double) totalElements / limit);
-    }
-
-    private boolean hasNextPage(int page, int limit, long totalElements) {
-        return (long) (page + 1) * limit < totalElements;
-    }
-
-    public PageResponse<CompanyOptionsResponse> getCompaniesBySubCategoryName(
-            String subCategoryName, String type, int page, int limit) {
-        final int MAX_TOTAL_ELEMENTS = 1000;
-        int requestedOffset = page * limit;
-        if (requestedOffset >= MAX_TOTAL_ELEMENTS) {
-            throw new RuntimeException("limit exceeded");
-        }
-
+    public CursorPageResponse<CompanyOptionsResponse> getCompaniesBySubCategoryName(
+            String subCategoryName, String type, Long cursor, int limit) {
         String normalizedType = type == null ? "" : type.trim().toLowerCase();
-        if (!"companies".equals(normalizedType) && !"jobs".equals(normalizedType)) {
-            throw new BadRequestExceptions("Invalid type. Allowed values: companies, jobs");
+        if (!TypeConstants.COMPANIES.equals(normalizedType) && !TypeConstants.JOBS.equals(normalizedType)) {
+            throw new BadRequestExceptions(MessageConstants.Validation.INVALID_TYPE_COMPANIES_OR_JOBS);
         }
 
-        Pageable pageable = PageRequest.of(page, limit);
-        Page<CompanyOptionsResponse> pageResult;
-
-        if ("companies".equals(normalizedType)) {
-            pageResult = companyRepository.findCompaniesBySubCategoryNameViaProfile(subCategoryName, pageable);
+        if (TypeConstants.COMPANIES.equals(normalizedType)) {
+            return companyService.getCompaniesBySubCategoryNameViaProfile(subCategoryName, cursor, limit);
         } else {
             var subCategory = subCategoryRepository.findBySubCategoryNameIgnoreCase(subCategoryName);
             if (subCategory.isEmpty()) {
-                return emptyPageResponse(page, limit);
+                return emptyCursorPageResponse();
             }
             SubCategory sub = subCategory.get();
             if (sub.getCategory() == null || !"jobs".equalsIgnoreCase(sub.getCategory().getCategoryType())) {
-                return emptyPageResponse(page, limit);
+                return emptyCursorPageResponse();
             }
-            pageResult = companyRepository.findCompaniesBySubCategoryIdViaProfile(sub.getSubCategoryId(), pageable);
+            return companyService.getCompaniesBySubCategoryIdViaProfile(sub.getSubCategoryId(), cursor, limit);
         }
-
-        long cappedTotalElements = Math.min(pageResult.getTotalElements(), MAX_TOTAL_ELEMENTS);
-        return PageResponse.<CompanyOptionsResponse>builder()
-                .result(pageResult.getContent())
-                .meta(PageResponse.Meta.builder()
-                        .page(page).size(limit)
-                        .totalElements(cappedTotalElements)
-                        .totalPages(calculateTotalPages(cappedTotalElements, limit))
-                        .hasNext(hasNextPage(page, limit, cappedTotalElements))
-                        .hasPrevious(page > 0)
-                        .build())
-                .build();
     }
 
-    private PageResponse<CompanyOptionsResponse> emptyPageResponse(int page, int limit) {
-        return PageResponse.<CompanyOptionsResponse>builder()
+    @Override
+    public boolean existsSubCategoryById(Long id) {
+        return subCategoryRepository.existsById(id);
+    }
+
+    @Override
+    public Map<Long, String> getSubCategoryNameMap(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) return Map.of();
+        return subCategoryRepository.findBySubCategoryIds(ids).stream()
+                .collect(Collectors.toMap(
+                        SubCategory::getSubCategoryId,
+                        SubCategory::getSubCategoryName
+                ));
+    }
+
+    private CursorPageResponse<CompanyOptionsResponse> emptyCursorPageResponse() {
+        return CursorPageResponse.<CompanyOptionsResponse>builder()
                 .result(List.of())
-                .meta(PageResponse.Meta.builder()
-                        .page(page).size(limit)
-                        .totalElements(0)
-                        .totalPages(0)
-                        .hasNext(false)
-                        .hasPrevious(false)
+                .meta(CursorPageResponse.Meta.builder()
+                        .nextCursor(null)
+                        .previousCursor(null)
+                        .size(0)
+                        .hasMore(false)
                         .build())
                 .build();
     }

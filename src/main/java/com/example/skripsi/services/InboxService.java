@@ -5,6 +5,7 @@ import com.example.skripsi.exceptions.*;
 import com.example.skripsi.interfaces.*;
 import com.example.skripsi.models.*;
 import com.example.skripsi.models.inbox.*;
+import com.example.skripsi.models.constant.*;
 import com.example.skripsi.repositories.*;
 import com.example.skripsi.securities.*;
 import jakarta.transaction.Transactional;
@@ -13,59 +14,71 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
 public class InboxService implements IInboxService {
 
     private static final Map<String, String> REFERENCE_URL_TEMPLATES = Map.of(
-            "COMPANY_REQUEST", "/company/request/%d",
-            "UPLOAD_CERTIFICATES", "/user/certificate/request/%d"
+            EntityTypeConstants.COMPANY_REQUEST, UrlPathConstants.COMPANY_REQUEST_PATH,
+            EntityTypeConstants.UPLOAD_CERTIFICATES, UrlPathConstants.UPLOAD_CERTIFICATES_PATH
     );
 
     private final UserNotificationRepository userNotificationRepository;
-    private final CompanyRequestRepository companyRequestRepository;
+    private final ICompanyService companyService;
     private final SecurityUtils securityUtils;
 
     public InboxService(UserNotificationRepository userNotificationRepository,
-                        CompanyRequestRepository companyRequestRepository,
+                        ICompanyService companyService,
                         SecurityUtils securityUtils) {
         this.userNotificationRepository = userNotificationRepository;
-        this.companyRequestRepository = companyRequestRepository;
+        this.companyService = companyService;
         this.securityUtils = securityUtils;
     }
 
     @Override
-    public PageResponse<InboxPreviewResponse> getUserInboxPreview(int page, int limit) {
+    public CursorPageResponse<InboxPreviewResponse> getUserInboxPreview(Long cursor, int limit) {
         Long userId = securityUtils.getCurrentUserId();
-        final int MAX_TOTAL_ELEMENTS = 1000;
+        
+        Pageable pageable = PageRequest.of(0, 1000);
+        Page<UserNotification> pageResult = userNotificationRepository
+                .findByUserIdOrderByCreatedAtDesc(userId, pageable);
 
-        int requestedOffset = page * limit;
-        if (requestedOffset >= MAX_TOTAL_ELEMENTS) {
-            throw new BadRequestExceptions("limit exceeded");
+        List<InboxPreviewResponse> allItems = pageResult.getContent().stream()
+                .map(this::toPreviewResponse)
+                .collect(Collectors.toList());
+
+        List<InboxPreviewResponse> filteredItems;
+        if (cursor == null) {
+            filteredItems = allItems.stream()
+                    .limit(limit)
+                    .collect(Collectors.toList());
+        } else {
+            filteredItems = allItems.stream()
+                    .filter(item -> item.getInboxId() < cursor)
+                    .limit(limit)
+                    .collect(Collectors.toList());
         }
 
-        Pageable pageable = PageRequest.of(page, limit);
-        Page<InboxPreviewResponse> pageResult = userNotificationRepository
-                .findByUserIdOrderByCreatedAtDesc(userId, pageable)
-                .map(this::toPreviewResponse);
+        boolean hasMore = allItems.stream()
+                .filter(item -> cursor == null || item.getInboxId() < cursor)
+                .count() > limit;
 
-        long actualTotalElements = pageResult.getTotalElements();
-        long cappedTotalElements = Math.min(actualTotalElements, MAX_TOTAL_ELEMENTS);
+        Long nextCursor = null;
+        if (!filteredItems.isEmpty() && hasMore) {
+            nextCursor = filteredItems.get(filteredItems.size() - 1).getInboxId();
+        }
 
-        int totalPages = calculateTotalPages(cappedTotalElements, limit);
-        boolean hasNext = hasNextPage(page, limit, cappedTotalElements);
-
-        return PageResponse.<InboxPreviewResponse>builder()
-                .result(pageResult.getContent())
-                .meta(PageResponse.Meta.builder()
-                        .page(page)
-                        .size(limit)
-                        .totalElements(cappedTotalElements)
-                        .totalPages(totalPages)
-                        .hasNext(hasNext)
-                        .hasPrevious(page > 0)
+        return CursorPageResponse.<InboxPreviewResponse>builder()
+                .result(filteredItems)
+                .meta(CursorPageResponse.Meta.builder()
+                        .nextCursor(nextCursor)
+                        .previousCursor(cursor)
+                        .size(filteredItems.size())
+                        .hasMore(hasMore)
                         .build())
                 .build();
     }
@@ -87,10 +100,8 @@ public class InboxService implements IInboxService {
 
     private String resolveActivity(String type, String action, Long referenceId) {
         if (type == null || action == null || referenceId == null) return null;
-        if ("COMPANY_REQUEST".equals(type)) {
-            return companyRequestRepository.findById(referenceId)
-                    .map(CompanyRequest::getCompanyName)
-                    .orElse("Unknown");
+        if (EntityTypeConstants.COMPANY_REQUEST.equals(type)) {
+            return companyService.getCompanyRequestName(referenceId);
         } else {
             return normalizeType(type);
         }
@@ -112,13 +123,5 @@ public class InboxService implements IInboxService {
         if (type == null || referenceId == null) return null;
         String template = REFERENCE_URL_TEMPLATES.get(type);
         return template != null ? template.formatted(referenceId) : null;
-    }
-
-    private int calculateTotalPages(long totalElements, int limit) {
-        return (int) Math.ceil((double) totalElements / limit);
-    }
-
-    private boolean hasNextPage(int page, int limit, long totalElements) {
-        return (long) (page + 1) * limit < totalElements;
     }
 }

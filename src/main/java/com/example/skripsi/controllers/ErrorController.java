@@ -2,6 +2,7 @@ package com.example.skripsi.controllers;
 
 import com.example.skripsi.exceptions.*;
 import com.example.skripsi.models.*;
+import com.example.skripsi.models.constant.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -12,6 +13,7 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 
 import java.util.concurrent.CompletionException;
+import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class ErrorController {
@@ -21,7 +23,7 @@ public class ErrorController {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(WebResponse.<String>builder()
                         .success(false)
-                        .message("Not Found")
+                        .message(MessageConstants.NotFound.ACCESS_DENIED_NOT_FOUND)
                         .build());
     }
 
@@ -30,16 +32,16 @@ public class ErrorController {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(WebResponse.<String>builder()
                         .success(false)
-                        .message("Access Denied")
+                        .message(MessageConstants.NotFound.ACCESS_DENIED)
                         .build());
     }
 
-    @ExceptionHandler(CustomAccesDeniedExceptions.class)
-    public ResponseEntity<WebResponse<?>> customHandleAccessDenied(CustomAccesDeniedExceptions ex) {
+    @ExceptionHandler(CustomAccessDeniedException.class)
+    public ResponseEntity<WebResponse<?>> customHandleAccessDenied(CustomAccessDeniedException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(WebResponse.<String>builder()
                         .success(false)
-                        .message("Access Denied")
+                        .message(MessageConstants.NotFound.ACCESS_DENIED)
                         .build());
     }
 
@@ -90,16 +92,9 @@ public class ErrorController {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<WebResponse<?>> handleValidationException(MethodArgumentNotValidException ex) {
-        StringBuilder sb = new StringBuilder();
-
-        ex.getBindingResult().getFieldErrors().forEach(fieldError -> {
-            sb.append(fieldError.getField())   // field name
-                    .append(" ")
-                    .append(fieldError.getDefaultMessage())
-                    .append("; ");
-        });
-
-        String errorMessage = sb.toString().trim();
+        String errorMessage = ex.getBindingResult().getFieldErrors().stream()
+                .map(error -> error.getField() + " " + error.getDefaultMessage())
+                .collect(Collectors.joining("; "));
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(WebResponse.builder()
@@ -125,7 +120,7 @@ public class ErrorController {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(WebResponse.builder()
                         .success(false)
-                        .message("Async operation failed: " + causeMsg)
+                        .message(MessageConstants.Async.ASYNC_OPERATION_FAILED + causeMsg)
                         .build());
     }
 

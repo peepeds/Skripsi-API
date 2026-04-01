@@ -4,7 +4,7 @@ import com.example.skripsi.entities.*;
 import com.example.skripsi.exceptions.*;
 import com.example.skripsi.interfaces.*;
 import com.example.skripsi.models.major.*;
-import com.example.skripsi.repositories.*;
+import com.example.skripsi.repositories.MajorRepository;
 import com.example.skripsi.securities.*;
 import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
@@ -18,18 +18,18 @@ import java.util.Map;
 public class MajorService extends AbstractMasterDataService<Major, MajorResponse, CreateMajorRequest, UpdateMajorRequest> implements IMajorService {
 
     private final MajorRepository majorRepository;
-    private final RegionRepository regionRepository;
-    private final DepartmentRepository departmentRepository;
+    private final IRegionService regionService;
+    private final IDepartmentService departmentService;
 
     public MajorService(MajorRepository majorRepository,
-                        DepartmentRepository departmentRepository,
-                        RegionRepository regionRepository,
-                        UserRepository userRepository,
+                        IDepartmentService departmentService,
+                        IRegionService regionService,
+                        IUserService userService,
                         SecurityUtils securityUtils) {
-        super(majorRepository, userRepository, securityUtils);
+        super(majorRepository, userService, securityUtils);
         this.majorRepository = majorRepository;
-        this.departmentRepository = departmentRepository;
-        this.regionRepository = regionRepository;
+        this.departmentService = departmentService;
+        this.regionService = regionService;
     }
 
     public List<MajorResponse> getAllMajor() {
@@ -56,20 +56,14 @@ public class MajorService extends AbstractMasterDataService<Major, MajorResponse
             throw new BadRequestExceptions("Major Name already exists!");
         }
         
-        regionRepository.findById(request.getRegionId())
-                .orElseThrow(() -> new ResourceNotFoundException("Region not found"));
-        
-        departmentRepository.findById(request.getDeptId())
-                .orElseThrow(() -> new ResourceNotFoundException("Department not found"));
+        regionService.findRegionById(Long.valueOf(request.getRegionId()));
+        departmentService.findDepartmentById(request.getDeptId());
     }
 
     @Override
     protected Major buildEntity(CreateMajorRequest request, Long userId) {
-        Region region = regionRepository.findById(request.getRegionId())
-                .orElseThrow(() -> new ResourceNotFoundException("Region not found"));
-        
-        Department department = departmentRepository.findById(request.getDeptId())
-                .orElseThrow(() -> new ResourceNotFoundException("Department not found"));
+        Region region = regionService.findRegionById(Long.valueOf(request.getRegionId()));
+        Department department = departmentService.findDepartmentById(request.getDeptId());
 
         return Major.builder()
                 .majorName(request.getMajorName())
@@ -88,14 +82,12 @@ public class MajorService extends AbstractMasterDataService<Major, MajorResponse
         }
         
         if (request.getRegionId() != null) {
-            Region region = regionRepository.findById(request.getRegionId())
-                    .orElseThrow(() -> new BadRequestExceptions("Region not found"));
+            Region region = regionService.findRegionById(Long.valueOf(request.getRegionId()));
             entity.setRegion(region);
         }
         
         if (request.getDeptId() != null) {
-            Department department = departmentRepository.findById(request.getDeptId())
-                    .orElseThrow(() -> new BadRequestExceptions("Department not found"));
+            Department department = departmentService.findDepartmentById(request.getDeptId());
             entity.setDepartment(department);
         }
         
@@ -112,9 +104,9 @@ public class MajorService extends AbstractMasterDataService<Major, MajorResponse
     }
 
     @Override
-    protected MajorResponse toResponse(Major major, Map<Long, User> userMap) {
-        String createdByUser = resolveUsername(major.getCreatedBy(), userMap);
-        String updatedByUser = resolveUsername(major.getUpdatedBy(), userMap);
+    protected MajorResponse toResponse(Major major, Map<Long, String> userNameMap) {
+        String createdByUser = resolveUsername(major.getCreatedBy(), userNameMap);
+        String updatedByUser = resolveUsername(major.getUpdatedBy(), userNameMap);
 
         return MajorResponse.builder()
                 .majorId(major.getMajorId())
@@ -132,5 +124,11 @@ public class MajorService extends AbstractMasterDataService<Major, MajorResponse
     @Override
     protected String getNotFoundErrorMessage() {
         return "Major not found!";
+    }
+
+    @Override
+    public Major findMajorById(Long id) {
+        return majorRepository.findById(id.intValue())
+                .orElseThrow(() -> new BadRequestExceptions("Major not found!"));
     }
 }

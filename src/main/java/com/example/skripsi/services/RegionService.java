@@ -13,6 +13,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 
+
 @Service
 @Transactional
 public class RegionService extends AbstractMasterDataService<Region, RegionResponse, CreateRegionRequest, UpdateRegionRequest> implements IRegionService {
@@ -20,9 +21,9 @@ public class RegionService extends AbstractMasterDataService<Region, RegionRespo
     private final RegionRepository regionRepository;
 
     public RegionService(RegionRepository regionRepository,
-                         UserRepository userRepository,
+                         IUserService userService,
                          SecurityUtils securityUtils) {
-        super(regionRepository, userRepository, securityUtils);
+        super(regionRepository, userService, securityUtils);
         this.regionRepository = regionRepository;
     }
 
@@ -78,9 +79,9 @@ public class RegionService extends AbstractMasterDataService<Region, RegionRespo
     }
 
     @Override
-    protected RegionResponse toResponse(Region region, Map<Long, User> userMap) {
-        String createdByUser = resolveUsername(region.getCreatedBy(), userMap);
-        String updatedByUser = resolveUsername(region.getUpdatedBy(), userMap);
+    protected RegionResponse toResponse(Region region, Map<Long, String> userNameMap) {
+        String createdByUser = resolveUsername(region.getCreatedBy(), userNameMap);
+        String updatedByUser = resolveUsername(region.getUpdatedBy(), userNameMap);
 
         return RegionResponse.builder()
                 .regionId(region.getRegionId())
@@ -96,5 +97,11 @@ public class RegionService extends AbstractMasterDataService<Region, RegionRespo
     @Override
     protected String getNotFoundErrorMessage() {
         return "Region not found!";
+    }
+
+    @Override
+    public Region findRegionById(Long id) {
+        return regionRepository.findById(id.intValue())
+                .orElseThrow(() -> new BadRequestExceptions("Region not found!"));
     }
 }

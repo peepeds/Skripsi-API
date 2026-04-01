@@ -4,7 +4,8 @@ import com.example.skripsi.entities.*;
 import com.example.skripsi.exceptions.*;
 import com.example.skripsi.interfaces.*;
 import com.example.skripsi.models.audit.*;
-import com.example.skripsi.repositories.*;
+import com.example.skripsi.models.constant.*;
+import com.example.skripsi.repositories.AuditLogRepository;
 import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 
@@ -15,47 +16,39 @@ import java.util.stream.Collectors;
 @Transactional
 public class AuditService implements IAuditService {
 
-    private static final List<String> VALID_ENTITIES = List.of("COMPANY_REQUEST", "UPLOAD_CERTIFICATES");
+    private static final List<String> VALID_ENTITIES = List.of(EntityTypeConstants.COMPANY_REQUEST, EntityTypeConstants.UPLOAD_CERTIFICATES);
 
     private final AuditLogRepository auditLogRepository;
-    private final UserRepository userRepository;
-    private final CompanyRequestRepository companyRequestRepository;
-    private final NotificationRepository notificationRepository;
-    private final UserCertificateRequestRepository userCertificateRequestRepository;
+    private final ICompanyService companyService;
+    private final IUserService userService;
 
-    public AuditService(AuditLogRepository auditLogRepository, UserRepository userRepository,
-                        CompanyRequestRepository companyRequestRepository, NotificationRepository notificationRepository,
-                        UserCertificateRequestRepository userCertificateRequestRepository) {
+    public AuditService(AuditLogRepository auditLogRepository, ICompanyService companyService, IUserService userService) {
         this.auditLogRepository = auditLogRepository;
-        this.userRepository = userRepository;
-        this.companyRequestRepository = companyRequestRepository;
-        this.notificationRepository = notificationRepository;
-        this.userCertificateRequestRepository = userCertificateRequestRepository;
+        this.companyService = companyService;
+        this.userService = userService;
     }
 
     @Override
     public List<AuditLogResponse> getAuditLogs(String entity, Long id, Long currentUserId) {
         if (entity == null || id == null) {
-            throw new BadRequestExceptions("entity and id are required");
+            throw new BadRequestExceptions(MessageConstants.Validation.ENTITY_AND_ID_REQUIRED);
         }
         String entityUpper = entity.toUpperCase();
         if (!VALID_ENTITIES.contains(entityUpper)) {
-            throw new BadRequestExceptions("Unknown entity type: " + entity);
+            throw new BadRequestExceptions(MessageConstants.Validation.UNKNOWN_ENTITY_TYPE + entity);
         }
 
-        if ("COMPANY_REQUEST".equals(entityUpper)) {
-            var request = companyRequestRepository.findById(id)
-                    .orElseThrow(() -> new BadRequestExceptions("Company request not found"));
-            if (!request.getCreatedBy().equals(currentUserId)) {
-                throw new CustomAccesDeniedExceptions("Access denied: you can only view audit logs for your own requests");
+        if (EntityTypeConstants.COMPANY_REQUEST.equals(entityUpper)) {
+            Boolean isOwner = companyService.isCompanyRequestOwner(id, currentUserId);
+            if (!isOwner) {
+                throw new CustomAccessDeniedException(MessageConstants.NotFound.ACCESS_DENIED_OWN_AUDIT_LOGS);
             }
         }
 
-        if ("UPLOAD_CERTIFICATES".equals(entityUpper)) {
-            var userCertificateRequest = userCertificateRequestRepository.findById(id)
-                    .orElseThrow(() -> new BadRequestExceptions("Request document not found"));
-            if (!userCertificateRequest.getCreatedBy().equals(currentUserId)) {
-                throw new CustomAccesDeniedExceptions("Access denied: you can only view audit logs for your own requests");
+        if (EntityTypeConstants.UPLOAD_CERTIFICATES.equals(entityUpper)) {
+            Boolean isOwner = userService.isCertificateRequestOwner(id, currentUserId);
+            if (!isOwner) {
+                throw new CustomAccessDeniedException(MessageConstants.NotFound.ACCESS_DENIED_OWN_AUDIT_LOGS);
             }
         }
 
@@ -94,9 +87,6 @@ public class AuditService implements IAuditService {
     }
 
     private String resolveUserName(Long userId) {
-        if (userId == null) return null;
-        return userRepository.findByUserId(userId)
-                .map(u -> u.getFirstName() + (u.getLastName() != null ? " " + u.getLastName() : ""))
-                .orElse(null);
+        return userService.resolveUserName(userId);
     }
 }

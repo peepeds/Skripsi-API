@@ -29,9 +29,9 @@ public class CategoryController {
     public WebResponse<?> getCompaniesBySubCategory(
             @PathVariable("subCategoryName") String subCategoryName,
             @RequestParam(value = "type", defaultValue = "companies") String type,
-            @RequestParam(value = "page", defaultValue = "0") int page,
+            @RequestParam(value = "cursor", required = false) Long cursor,
             @RequestParam(value = "limit", defaultValue = "10") int limit) {
-        var result = categoryService.getCompaniesBySubCategoryName(subCategoryName, type, page, limit);
+        var result = categoryService.getCompaniesBySubCategoryName(subCategoryName, type, cursor, limit);
         return WebResponse.builder()
                 .success(true)
                 .message("Successfully Get Companies by SubCategory data")

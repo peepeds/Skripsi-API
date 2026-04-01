@@ -59,8 +59,12 @@ public class ReviewController {
     }
 
     @GetMapping("/{slug}")
-    public WebResponse<?> getCompanyReviews(@PathVariable String slug) {
-        var result = reviewService.getCompanyReviews(slug);
+    public WebResponse<?> getCompanyReviews(
+            @PathVariable String slug,
+            @RequestParam(value = "order", defaultValue = "popular") String order,
+            @RequestParam(value = "cursor", required = false) Long cursor,
+            @RequestParam(value = "limit", defaultValue = "10") int limit) {
+        var result = reviewService.getCompanyReviews(slug, order, cursor, limit);
         return WebResponse.builder()
                 .success(true)
                 .message("Successfully retrieved company reviews")

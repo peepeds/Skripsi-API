@@ -9,7 +9,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class TestController {
 
     @GetMapping("/ping")
-    //@PreAuthorize("hasAnyRole('ADMIN', 'EPC')")
     public WebResponse<?> ping(){
         return WebResponse.builder()
                 .success(true)
