@@ -5,13 +5,16 @@ import com.example.skripsi.entities.*;
 import com.example.skripsi.exceptions.*;
 import com.example.skripsi.interfaces.*;
 import com.example.skripsi.models.user.*;
+import com.example.skripsi.models.constant.*;
 import com.example.skripsi.repositories.*;
 import com.example.skripsi.securities.*;
 import jakarta.transaction.Transactional;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -35,7 +38,7 @@ public class UserService implements IUserService {
                        NotificationRepository notificationRepository,
                        UserNotificationRepository userNotificationRepository,
                        UserCertificateRequestRepository userCertificateRequestRepository,
-                       AuditService auditService,
+                       @Lazy AuditService auditService,
                        UserCertificatesRepository userCertificatesRepository, MinioConfig minioConfig){
         this.userProfileRepository = userProfileRepository;
         this.userRepository = userRepository;
@@ -54,7 +57,7 @@ public class UserService implements IUserService {
         Long userId = securityUtils.getCurrentUserId();
 
         var privilegeLevel = userRepository.getUserPrivilege(userId)
-                .orElseThrow(() -> new CustomAccesDeniedExceptions("Insufficient privileges"))
+                .orElseThrow(() -> new CustomAccessDeniedException("Insufficient privileges"))
                 .toLowerCase();
 
         var users = userRepository.getUserByUserPrivilege(privilegeLevel, userId);
@@ -189,12 +192,12 @@ public class UserService implements IUserService {
     public CertificateResponse submitCertificateRequest(CreateCertificateRequest request) {
         Long userId = securityUtils.getCurrentUserId();
         UserProfile userProfile = userProfileRepository.findByUserUserId(userId)
-                .orElseThrow(() -> new InvalidCredentialsException("User profile not found"));
+                .orElseThrow(() -> new InvalidCredentialsException(MessageConstants.NotFound.USER_PROFILE_NOT_FOUND));
 
         // Create notification
         Notification notification = Notification.builder()
-                .type("UPLOAD_CERTIFICATES")
-                .action("SUBMITTED")
+                .type(EntityTypeConstants.UPLOAD_CERTIFICATES)
+                .action(ActionConstants.SUBMITTED)
                 .referenceId(userProfile.getUserProfileId())
                 .actorId(userId)
                 .createdAt(OffsetDateTime.now())
@@ -215,9 +218,9 @@ public class UserService implements IUserService {
                 .notification(savedNotification)
                 .documentName(request.getCertificateName())
                 .documentUrl(request.getCertificateUrl())
-                .documentType("CERTIFICATE")
+                .documentType(DocumentTypeConstants.CERTIFICATE)
                 .fileSize(request.getFileSize())
-                .status("PENDING")
+                .status(StatusConstants.PENDING)
                 .createdAt(OffsetDateTime.now())
                 .createdBy(userId)
                 .build();
@@ -227,7 +230,7 @@ public class UserService implements IUserService {
         savedNotification.setReferenceId(userCertificateRequest.getDocumentId());
         notificationRepository.save(savedNotification);
 
-        auditService.record("UPLOAD_CERTIFICATES", userCertificateRequest.getDocumentId(), "SUBMITTED", userId);
+        auditService.record(EntityTypeConstants.UPLOAD_CERTIFICATES, userCertificateRequest.getDocumentId(), ActionConstants.SUBMITTED, userId);
 
         return CertificateResponse.builder()
                 .userCertificateId(null) // belum ada
@@ -242,20 +245,20 @@ public class UserService implements IUserService {
         Long reviewerId = securityUtils.getCurrentUserId();
 
         UserCertificateRequest userCertificateRequest = userCertificateRequestRepository.findById(requestId)
-                .orElseThrow(() -> new InvalidCredentialsException("Request document not found"));
+                .orElseThrow(() -> new InvalidCredentialsException(MessageConstants.NotFound.REQUEST_DOCUMENT_NOT_FOUND));
 
-        if (!"CERTIFICATE".equals(userCertificateRequest.getDocumentType())) {
-            throw new InvalidCredentialsException("Invalid document type");
+        if (!DocumentTypeConstants.CERTIFICATE.equals(userCertificateRequest.getDocumentType())) {
+            throw new InvalidCredentialsException(MessageConstants.Validation.INVALID_DOCUMENT_TYPE);
         }
 
         // Locking: prevent re-review if already finalized
-        if ("APPROVED".equals(userCertificateRequest.getStatus()) || "REJECTED".equals(userCertificateRequest.getStatus())) {
-            throw new InvalidCredentialsException("Certificate request has already been " + userCertificateRequest.getStatus().toLowerCase() + " and cannot be changed");
+        if (ActionConstants.APPROVED.equals(userCertificateRequest.getStatus()) || ActionConstants.REJECTED.equals(userCertificateRequest.getStatus())) {
+            throw new InvalidCredentialsException(MessageConstants.Certificate.CERTIFICATE_REQUEST_ALREADY_FINALIZED + userCertificateRequest.getStatus().toLowerCase() + MessageConstants.Certificate.CANNOT_BE_CHANGED);
         }
 
-        if ("APPROVED".equals(request.getStatus())) {
+        if (ActionConstants.APPROVED.equals(request.getStatus())) {
             UserProfile userProfile = userProfileRepository.findById(userCertificateRequest.getNotification().getReferenceId())
-                    .orElseThrow(() -> new InvalidCredentialsException("User profile not found"));
+                    .orElseThrow(() -> new InvalidCredentialsException(MessageConstants.NotFound.USER_PROFILE_NOT_FOUND));
 
             UserCertificates userCertificate = UserCertificates.builder()
                     .userProfile(userProfile)
@@ -271,7 +274,7 @@ public class UserService implements IUserService {
         userCertificateRequest.setUploadedAt(OffsetDateTime.now());
         userCertificateRequestRepository.save(userCertificateRequest);
 
-        String actionLabel = "APPROVED".equals(request.getStatus()) ? "APPROVED" : "REJECTED";
+        String actionLabel = ActionConstants.APPROVED.equals(request.getStatus()) ? ActionConstants.APPROVED : ActionConstants.REJECTED;
 
         // Update the existing notification for the review action
         Notification notification = userCertificateRequest.getNotification();
@@ -300,7 +303,7 @@ public class UserService implements IUserService {
             }
         }
 
-        auditService.record("UPLOAD_CERTIFICATES", requestId, actionLabel, reviewerId, request.getReviewNote());
+        auditService.record(EntityTypeConstants.UPLOAD_CERTIFICATES, requestId, actionLabel, reviewerId, request.getReviewNote());
 
         return CertificateResponse.builder()
                 .userCertificateId(null)
@@ -319,13 +322,13 @@ public class UserService implements IUserService {
 
         Notification notification = userCertificateRequest.getNotification();
 
-        if (!"UPLOAD_CERTIFICATES".equals(notification.getType())) {
+        if (!EntityTypeConstants.UPLOAD_CERTIFICATES.equals(notification.getType())) {
             throw new InvalidCredentialsException("Invalid notification type");
         }
 
         // Only the owner of the request may view its detail
         if (!userCertificateRequest.getCreatedBy().equals(currentUserId)) {
-            throw new CustomAccesDeniedExceptions("Access denied: you can only view your own certificate requests");
+            throw new CustomAccessDeniedException("Access denied: you can only view your own certificate requests");
         }
 
         return CertificateRequestDetailResponse.builder()
@@ -346,8 +349,50 @@ public class UserService implements IUserService {
                 .build();
     }
 
-    private String resolveUserName(Long userId) {
+    @Override
+    public String resolveUserName(Long userId) {
         if (userId == null) return null;
         return userRepository.findByUserId(userId).map(User::getFirstName).orElse(null);
+    }
+
+    @Override
+    public Map<Long, String> getUserNameMap(List<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) return Map.of();
+        Map<Long, User> userMap = userRepository.findByUserIdMap(userIds);
+        Map<Long, String> result = new java.util.HashMap<>();
+        userMap.forEach((id, user) -> result.put(id, user.getFirstName()));
+        return result;
+    }
+
+    @Override
+    public Boolean userExists(Long userId) {
+        if (userId == null) return false;
+        return userRepository.existsById(userId);
+    }
+
+    @Override
+    public Optional<User> findUserById(Long userId) {
+        if (userId == null) return Optional.empty();
+        return userRepository.findById(userId);
+    }
+
+    @Override
+    public List<Notification> findNotificationsByTypeAndReferenceId(String type, Long referenceId) {
+        if (type == null || referenceId == null) return List.of();
+        return notificationRepository.findByTypeAndReferenceId(type, referenceId);
+    }
+
+    @Override
+    public List<UserCertificateRequest> findUserCertificateRequestsByNotificationId(Long notificationId) {
+        if (notificationId == null) return List.of();
+        return userCertificateRequestRepository.findByNotification_NotificationId(notificationId);
+    }
+
+    @Override
+    public Boolean isCertificateRequestOwner(Long requestId, Long userId) {
+        if (requestId == null || userId == null) return false;
+        return userCertificateRequestRepository.findById(requestId)
+                .map(req -> req.getCreatedBy().equals(userId))
+                .orElse(false);
     }
 }

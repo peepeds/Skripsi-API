@@ -4,6 +4,7 @@ import com.example.skripsi.entities.*;
 import com.example.skripsi.exceptions.*;
 import com.example.skripsi.interfaces.*;
 import com.example.skripsi.models.auth.*;
+import com.example.skripsi.models.constant.*;
 import com.example.skripsi.repositories.*;
 import com.example.skripsi.securities.*;
 import jakarta.transaction.Transactional;
@@ -22,23 +23,23 @@ public class AuthService implements IAuthService {
     private final UserRepository userRepository;
     private final UserProfileRepository userProfileRepository;
     private final UserTokenRepository userTokenRepository;
-    private final RegionRepository regionRepository;
-    private final MajorRepository majorRepository;
+    private final IRegionService regionService;
+    private final IMajorService majorService;
     private final JwtUtils jwtUtils;
 
     public AuthService(
             UserRepository userRepository,
             UserProfileRepository userProfileRepository,
             UserTokenRepository userTokenRepository,
-            RegionRepository regionRepository,
-            MajorRepository majorRepository,
+            IRegionService regionService,
+            IMajorService majorService,
             JwtUtils jwtUtils
     ) {
         this.userRepository = userRepository;
         this.userProfileRepository = userProfileRepository;
         this.userTokenRepository = userTokenRepository;
-        this.regionRepository = regionRepository;
-        this.majorRepository = majorRepository;
+        this.regionService = regionService;
+        this.majorService = majorService;
         this.jwtUtils = jwtUtils;
     }
 
@@ -47,17 +48,15 @@ public class AuthService implements IAuthService {
         String email = register.getEmail().toLowerCase();
 
         if (userRepository.findByEmail(email).isPresent()) {
-            throw new BadRequestExceptions("Email already used!");
+            throw new BadRequestExceptions(MessageConstants.Auth.EMAIL_ALREADY_USED);
         }
 
-        Region region = regionRepository.findById(register.getRegionId())
-                .orElseThrow(() -> new BadRequestExceptions("Region not found"));
+        Region region = regionService.findRegionById(Long.valueOf(register.getRegionId()));
 
-        Major major = majorRepository.findById(register.getMajorId())
-                .orElseThrow(() -> new BadRequestExceptions("Major not found"));
+        Major major = majorService.findMajorById(Long.valueOf(register.getMajorId()));
 
         if (!major.getRegion().getRegionId().equals(region.getRegionId())) {
-            throw new BadRequestExceptions("Major does not belong to the selected region");
+            throw new BadRequestExceptions(MessageConstants.Validation.MAJOR_DOES_NOT_BELONG_TO_REGION);
         }
 
         String encodedPassword = BCrypt.hashpw(
@@ -84,7 +83,7 @@ public class AuthService implements IAuthService {
         } else if (registerId.length() == 5 && registerId.startsWith("D")) {
             lectureId = registerId;
         } else {
-            throw new BadRequestExceptions("Invalid Student ID or Lecture ID!");
+            throw new BadRequestExceptions(MessageConstants.Auth.INVALID_STUDENT_ID_OR_LECTURE_ID);
         }
 
         UserProfile profile = UserProfile.builder()
@@ -104,11 +103,11 @@ public class AuthService implements IAuthService {
     public AuthResponse login(Login login) {
         User user = userRepository.findByEmail(login.getEmail().toLowerCase())
                 .orElseThrow(() ->
-                        new InvalidCredentialsException("Invalid email or password")
+                        new InvalidCredentialsException(MessageConstants.Auth.INVALID_EMAIL_OR_PASSWORD)
                 );
 
         if (!BCrypt.checkpw(login.getPassword(), user.getPassword())) {
-            throw new InvalidCredentialsException("Invalid email or password");
+            throw new InvalidCredentialsException(MessageConstants.Auth.INVALID_EMAIL_OR_PASSWORD);
         }
 
         List<String> roles = user.getRoles()

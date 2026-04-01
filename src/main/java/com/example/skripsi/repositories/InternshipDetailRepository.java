@@ -1,6 +1,9 @@
 package com.example.skripsi.repositories;
 
 import com.example.skripsi.entities.*;
+import com.example.skripsi.repositories.projections.CompanyRatingProjection;
+import com.example.skripsi.repositories.projections.CompanyReviewCountProjection;
+import com.example.skripsi.repositories.projections.RecentReviewProjection;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -22,7 +25,7 @@ public interface InternshipDetailRepository extends JpaRepository<InternshipDeta
             "INNER JOIN internship_headers ih ON id.internship_header_id = ih.internship_header_id " +
             "WHERE ih.company_id IN :companyIds " +
             "GROUP BY ih.company_id", nativeQuery = true)
-    List<Object[]> findAverageRatingsByCompanyIds(@Param("companyIds") List<Long> companyIds);
+    List<CompanyRatingProjection> findAverageRatingsByCompanyIds(@Param("companyIds") List<Long> companyIds);
 
     @Query(value = "SELECT COUNT(DISTINCT ih.internship_header_id) " +
             "FROM internship_headers ih " +
@@ -35,7 +38,7 @@ public interface InternshipDetailRepository extends JpaRepository<InternshipDeta
             WHERE ih.company_id IN :companyIds
             GROUP BY ih.company_id
             """, nativeQuery = true)
-    List<Object[]> findReviewCountsByCompanyIds(@Param("companyIds") List<Long> companyIds);
+    List<CompanyReviewCountProjection> findReviewCountsByCompanyIds(@Param("companyIds") List<Long> companyIds);
 
     @Query("SELECT id FROM InternshipDetail id WHERE id.internshipHeaderId IN :headerIds")
     List<InternshipDetail> findByInternshipHeaderIds(@Param("headerIds") List<Long> headerIds);
@@ -47,7 +50,7 @@ public interface InternshipDetailRepository extends JpaRepository<InternshipDeta
             "GROUP BY ih.company_id " +
             "ORDER BY avgRating DESC " +
             "LIMIT 10", nativeQuery = true)
-    List<Object[]> findTop10CompaniesByAverageRating();
+    List<CompanyRatingProjection> findTop10CompaniesByAverageRating();
 
     @Query(value = "SELECT id.testimony, " +
             "CONCAT(u.first_name, ' ', u.last_name) as createdByName, " +
@@ -66,5 +69,5 @@ public interface InternshipDetailRepository extends JpaRepository<InternshipDeta
             "LEFT JOIN categories cat ON sc.category_id = cat.category_id " +
             "ORDER BY id.created_at DESC " +
             "LIMIT 10", nativeQuery = true)
-    List<Object[]> findTop10RecentReviews();
+    List<RecentReviewProjection> findTop10RecentReviews();
 }

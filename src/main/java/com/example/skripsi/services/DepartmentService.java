@@ -20,9 +20,9 @@ public class DepartmentService extends AbstractMasterDataService<Department, Dep
     private final DepartmentRepository departmentRepository;
 
     public DepartmentService(DepartmentRepository departmentRepository,
-                             UserRepository userRepository,
+                             IUserService userService,
                              SecurityUtils securityUtils) {
-        super(departmentRepository, userRepository, securityUtils);
+        super(departmentRepository, userService, securityUtils);
         this.departmentRepository = departmentRepository;
     }
 
@@ -74,9 +74,9 @@ public class DepartmentService extends AbstractMasterDataService<Department, Dep
     }
 
     @Override
-    protected DepartmentResponse toResponse(Department department, Map<Long, User> userMap) {
-        String createdByUser = resolveUsername(department.getCreatedBy(), userMap);
-        String updatedByUser = resolveUsername(department.getUpdatedBy(), userMap);
+    protected DepartmentResponse toResponse(Department department, Map<Long, String> userNameMap) {
+        String createdByUser = resolveUsername(department.getCreatedBy(), userNameMap);
+        String updatedByUser = resolveUsername(department.getUpdatedBy(), userNameMap);
 
         return DepartmentResponse.builder()
                 .deptId(department.getDeptId())
@@ -92,5 +92,11 @@ public class DepartmentService extends AbstractMasterDataService<Department, Dep
     @Override
     protected String getNotFoundErrorMessage() {
         return "Department not found!";
+    }
+
+    @Override
+    public Department findDepartmentById(Integer id) {
+        return departmentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException(getNotFoundErrorMessage()));
     }
 }

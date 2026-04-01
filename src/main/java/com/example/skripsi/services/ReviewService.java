@@ -3,16 +3,22 @@ package com.example.skripsi.services;
 import com.example.skripsi.entities.*;
 import com.example.skripsi.exceptions.ResourceNotFoundException;
 import com.example.skripsi.exceptions.ValidationException;
+import com.example.skripsi.repositories.projections.CompanyRatingProjection;
+import com.example.skripsi.repositories.projections.CompanyReviewCountProjection;
 import com.example.skripsi.interfaces.*;
 import com.example.skripsi.models.job.JobListItemResponse;
 import com.example.skripsi.models.review.*;
+import com.example.skripsi.models.CursorPageResponse;
+import com.example.skripsi.models.constant.*;
 import com.example.skripsi.repositories.*;
+import com.example.skripsi.repositories.projections.RecentReviewProjection;
 import com.example.skripsi.securities.SecurityUtils;
 import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -21,29 +27,32 @@ import java.util.stream.Collectors;
 @Transactional
 public class ReviewService implements IReviewService {
 
+    private static final String DURATION_UNIT = " months";
+    private static final String DURATION_RANGE_SEPARATOR = " - ";
+
     private final InternshipHeaderRepository internshipHeaderRepository;
     private final InternshipDetailRepository internshipDetailRepository;
     private final RecruitmentStepRepository recruitmentStepRepository;
     private final InternshipJobSubCategoryRepository internshipJobSubCategoryRepository;
-    private final CompanyRepository companyRepository;
+    private final ICompanyService companyService;
     private final SecurityUtils securityUtils;
-    private final SubCategoryRepository subCategoryRepository;
+    private final ICategoryService categoryService;
     private final AuditService auditService;
 
     public ReviewService(InternshipHeaderRepository internshipHeaderRepository,
                          InternshipDetailRepository internshipDetailRepository,
                          RecruitmentStepRepository recruitmentStepRepository,
                          InternshipJobSubCategoryRepository internshipJobSubCategoryRepository,
-                         SubCategoryRepository subCategoryRepository,
-                         CompanyRepository companyRepository,
+                         ICategoryService categoryService,
+                         ICompanyService companyService,
                          SecurityUtils securityUtils,
                          AuditService auditService) {
         this.internshipHeaderRepository = internshipHeaderRepository;
         this.internshipDetailRepository = internshipDetailRepository;
         this.recruitmentStepRepository = recruitmentStepRepository;
         this.internshipJobSubCategoryRepository = internshipJobSubCategoryRepository;
-        this.subCategoryRepository = subCategoryRepository;
-        this.companyRepository = companyRepository;
+        this.categoryService = categoryService;
+        this.companyService = companyService;
         this.securityUtils = securityUtils;
         this.auditService = auditService;
     }
@@ -125,34 +134,25 @@ public class ReviewService implements IReviewService {
             internshipJobSubCategoryRepository.saveAll(jobSubCategories);
         }
 
-        auditService.record("INTERNSHIP_REVIEW", savedHeader.getInternshipHeaderId(), "SUBMITTED", userId);
+        auditService.record(EntityTypeConstants.INTERNSHIP_REVIEW, savedHeader.getInternshipHeaderId(), ActionConstants.SUBMITTED, userId);
 
         return ReviewResponse.builder()
                 .internshipHeaderId(savedHeader.getInternshipHeaderId())
                 .internshipDetailId(savedDetail.getInternshipDetailId())
                 .createdAt(now)
-                .message("Review submitted successfully")
+                .message(MessageConstants.Success.REVIEW_SUBMITTED_SUCCESSFULLY)
                 .build();
     }
 
     @Override
     public ReviewResponse submitReview(String slug, CreateReviewRequest request) {
-        Company company = companyRepository.findByCompanySlug(slug);
-        if (company == null) {
-            throw new ResourceNotFoundException("Company with slug '" + slug + "' not found");
-        }
-
+        Long companyId = companyService.getCompanyIdBySlug(slug);
         Long userId = securityUtils.getCurrentUserId();
-        return submitReview(company.getCompanyId(), request, userId);
+        return submitReview(companyId, request, userId);
     }
 
     public ReviewSummaryResponse getCompanySummary(String slug) {
-        Company company = companyRepository.findByCompanySlug(slug);
-        if (company == null) {
-            throw new ResourceNotFoundException("Company with slug '" + slug + "' not found");
-        }
-
-        Long companyId = company.getCompanyId();
+        Long companyId = companyService.getCompanyIdBySlug(slug);
 
         List<InternshipHeader> headers = internshipHeaderRepository.findByCompanyId(companyId);
         if (headers.isEmpty()) {
@@ -214,9 +214,9 @@ public class ReviewService implements IReviewService {
             return null;
         }
 
-        return minDuration.equals(maxDuration) 
-                ? minDuration + " months" 
-                : minDuration + " - " + maxDuration + " months";
+        return minDuration.equals(maxDuration)
+                ? minDuration + DURATION_UNIT
+                : minDuration + DURATION_RANGE_SEPARATOR + maxDuration + DURATION_UNIT;
     }
 
     private List<String> getWorkSchemesSortedByFrequency(List<InternshipDetail> details) {
@@ -244,61 +244,32 @@ public class ReviewService implements IReviewService {
             return List.of();
         }
 
-        Map<Long, SubCategory> subcatMap = subCategoryRepository.findBySubCategoryIds(subCategoryIds).stream()
-                .collect(Collectors.toMap(SubCategory::getSubCategoryId, Function.identity()));
+        Map<Long, String> subcatNameMap = categoryService.getSubCategoryNameMap(subCategoryIds);
 
         return subCategoryIds.stream()
-                .map(subCategoryId -> {
-                    SubCategory subCat = subcatMap.get(subCategoryId);
-                    return subCat != null ? subCat.getSubCategoryName() : null;
-                })
+                .map(subcatNameMap::get)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
     }
 
     private ReviewSummaryResponse.Ratings aggregateRatings(List<InternshipDetail> details) {
-        double workCultureAvg = details.stream()
-                .map(InternshipDetail::getWorkCultureRating)
-                .filter(Objects::nonNull)
-                .mapToDouble(Integer::doubleValue)
-                .average()
-                .orElse(0.0);
-
-        double learningOppAvg = details.stream()
-                .map(InternshipDetail::getLearningOpportunityRating)
-                .filter(Objects::nonNull)
-                .mapToDouble(Integer::doubleValue)
-                .average()
-                .orElse(0.0);
-
-        double mentorshipAvg = details.stream()
-                .map(InternshipDetail::getMentorshipRating)
-                .filter(Objects::nonNull)
-                .mapToDouble(Integer::doubleValue)
-                .average()
-                .orElse(0.0);
-
-        double benefitAvg = details.stream()
-                .map(InternshipDetail::getBenefitsRating)
-                .filter(Objects::nonNull)
-                .mapToDouble(Integer::doubleValue)
-                .average()
-                .orElse(0.0);
-
-        double workLifeBalanceAvg = details.stream()
-                .map(InternshipDetail::getWorkLifeBalanceRating)
-                .filter(Objects::nonNull)
-                .mapToDouble(Integer::doubleValue)
-                .average()
-                .orElse(0.0);
-
         return ReviewSummaryResponse.Ratings.builder()
-                .workCulture(workCultureAvg)
-                .learningOpp(learningOppAvg)
-                .mentorship(mentorshipAvg)
-                .benefit(benefitAvg)
-                .workLifeBalance(workLifeBalanceAvg)
+                .workCulture(averageRating(details, InternshipDetail::getWorkCultureRating))
+                .learningOpp(averageRating(details, InternshipDetail::getLearningOpportunityRating))
+                .mentorship(averageRating(details, InternshipDetail::getMentorshipRating))
+                .benefit(averageRating(details, InternshipDetail::getBenefitsRating))
+                .workLifeBalance(averageRating(details, InternshipDetail::getWorkLifeBalanceRating))
                 .build();
+    }
+
+    private double averageRating(List<InternshipDetail> details,
+                                  Function<InternshipDetail, Integer> mapper) {
+        return details.stream()
+                .map(mapper)
+                .filter(Objects::nonNull)
+                .mapToDouble(Integer::doubleValue)
+                .average()
+                .orElse(0.0);
     }
 
     private ReviewSummaryResponse.RecruitmentProcesses aggregateRecruitmentProcesses(Long companyId) {
@@ -337,18 +308,20 @@ public class ReviewService implements IReviewService {
                 .build();
     }
 
-    public CompanyReviewsResponse getCompanyReviews(String slug) {
-        Company company = companyRepository.findByCompanySlug(slug);
-        if (company == null) {
-            throw new ResourceNotFoundException("Company with slug '" + slug + "' not found");
-        }
-
-        Long companyId = company.getCompanyId();
+    @Override
+    public CursorPageResponse<CompanyReviewsResponse.ReviewItem> getCompanyReviews(String slug, String order, Long cursor, int limit) {
+        Long companyId = companyService.getCompanyIdBySlug(slug);
         List<InternshipHeader> headers = internshipHeaderRepository.findByCompanyId(companyId);
         
         if (headers.isEmpty()) {
-            return CompanyReviewsResponse.builder()
-                    .items(List.of())
+            return CursorPageResponse.<CompanyReviewsResponse.ReviewItem>builder()
+                    .result(List.of())
+                    .meta(CursorPageResponse.Meta.builder()
+                            .nextCursor(null)
+                            .previousCursor(null)
+                            .size(0)
+                            .hasMore(false)
+                            .build())
                     .build();
         }
 
@@ -363,8 +336,7 @@ public class ReviewService implements IReviewService {
                 .distinct()
                 .collect(Collectors.toList());
 
-        Map<Long, SubCategory> subcategoryMap = subCategoryRepository.findBySubCategoryIds(allSubCategoryIds).stream()
-                .collect(Collectors.toMap(SubCategory::getSubCategoryId, Function.identity()));
+        Map<Long, String> subcategoryNameMap = categoryService.getSubCategoryNameMap(allSubCategoryIds);
 
         Map<Long, List<String>> subCategoriesMap = jobSubCategories.stream()
                 .collect(Collectors.groupingBy(
@@ -372,10 +344,7 @@ public class ReviewService implements IReviewService {
                         Collectors.collectingAndThen(
                                 Collectors.toList(),
                                 list -> list.stream()
-                                        .map(ijsc -> {
-                                            SubCategory subCat = subcategoryMap.get(ijsc.getSubCategoryId());
-                                            return subCat != null ? subCat.getSubCategoryName() : null;
-                                        })
+                                        .map(jobSubCategory -> subcategoryNameMap.get(jobSubCategory.getSubCategoryId()))
                                         .filter(Objects::nonNull)
                                         .collect(Collectors.toList())
                         )
@@ -389,6 +358,7 @@ public class ReviewService implements IReviewService {
                 ));
 
         List<CompanyReviewsResponse.ReviewItem> items = headers.stream()
+                .filter(header -> cursor == null || header.getInternshipHeaderId() > cursor)
                 .map(header -> {
                     InternshipDetail detail = detailMap.get(header.getInternshipHeaderId());
                     
@@ -422,10 +392,33 @@ public class ReviewService implements IReviewService {
                             .createdAt(detail != null ? detail.getCreatedAt() : null)
                             .build();
                 })
+                .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
                 .collect(Collectors.toList());
 
-        return CompanyReviewsResponse.builder()
-                .items(items)
+        List<CompanyReviewsResponse.ReviewItem> paginatedItems = items.stream()
+                .limit(limit + 1)
+                .collect(Collectors.toList());
+
+        boolean hasMore = paginatedItems.size() > limit;
+        if (hasMore) {
+            paginatedItems = paginatedItems.subList(0, limit);
+        }
+
+        Long nextCursor = null;
+        Long previousCursor = cursor;
+        
+        if (hasMore && !paginatedItems.isEmpty()) {
+            nextCursor = paginatedItems.get(paginatedItems.size() - 1).getInternshipHeaderId();
+        }
+
+        return CursorPageResponse.<CompanyReviewsResponse.ReviewItem>builder()
+                .result(paginatedItems)
+                .meta(CursorPageResponse.Meta.builder()
+                        .nextCursor(nextCursor)
+                        .previousCursor(previousCursor)
+                        .size(paginatedItems.size())
+                        .hasMore(hasMore)
+                        .build())
                 .build();
     }
 
@@ -444,39 +437,56 @@ public class ReviewService implements IReviewService {
         }
 
         for (Long subCategoryId : subCategoryIds) {
-            if (!subCategoryRepository.existsById(subCategoryId)) {
+            if (!categoryService.existsSubCategoryById(subCategoryId)) {
                 throw new ResourceNotFoundException("SubCategory not found with id: " + subCategoryId);
             }
         }
     }
 
     @Override
-    public RecentReviewResponse getRecentReviews() {
-        List<Object[]> results = internshipDetailRepository.findTop10RecentReviews();
-        
-        List<RecentReviewResponse.ReviewItem> items = results.stream()
-                .map(row -> {
-                    Object createdAtValue = row[7];
-                    OffsetDateTime createdAt = null;
-                    if (createdAtValue instanceof OffsetDateTime) {
-                        createdAt = (OffsetDateTime) createdAtValue;
-                    } else if (createdAtValue instanceof java.time.Instant) {
-                        createdAt = ((java.time.Instant) createdAtValue).atOffset(java.time.ZoneOffset.UTC);
-                    }
-                    
-                    return RecentReviewResponse.ReviewItem.builder()
-                            .testimony((String) row[0])
-                            .createdBy((String) row[1])
-                            .averageRating(row[2] != null ? ((Number) row[2]).doubleValue() : 0.0)
-                            .companyName((String) row[3])
-                            .companyCategory((String) row[4])
-                            .companyWebsite((String) row[5])
-                            .jobTitle((String) row[6])
-                            .createdAt(createdAt)
-                            .build();
-                })
+    public Map<Long, Double> getRatingsByCompanyIds(List<Long> companyIds) {
+        if (companyIds == null || companyIds.isEmpty()) return Map.of();
+        Map<Long, Double> result = new HashMap<>();
+        for (CompanyRatingProjection row : internshipDetailRepository.findAverageRatingsByCompanyIds(companyIds)) {
+            result.put(row.getCompanyId(), row.getAvgRating());
+        }
+        return result;
+    }
+
+    @Override
+    public List<Long> getTop10CompanyIdsByRating() {
+        return internshipDetailRepository.findTop10CompaniesByAverageRating().stream()
+                .map(CompanyRatingProjection::getCompanyId)
                 .collect(Collectors.toList());
-        
+    }
+
+    @Override
+    public Map<Long, Long> getReviewCountsByCompanyIds(List<Long> companyIds) {
+        if (companyIds == null || companyIds.isEmpty()) return Map.of();
+        Map<Long, Long> result = new HashMap<>();
+        for (CompanyReviewCountProjection row : internshipDetailRepository.findReviewCountsByCompanyIds(companyIds)) {
+            result.put(row.getCompanyId(), row.getReviewCount());
+        }
+        return result;
+    }
+
+    @Override
+    public RecentReviewResponse getRecentReviews() {
+        List<RecentReviewProjection> results = internshipDetailRepository.findTop10RecentReviews();
+
+        List<RecentReviewResponse.ReviewItem> items = results.stream()
+                .map(row -> RecentReviewResponse.ReviewItem.builder()
+                        .testimony(row.getTestimony())
+                        .createdBy(row.getCreatedByName())
+                        .averageRating(row.getAverageRating() != null ? row.getAverageRating() : 0.0)
+                        .companyName(row.getCompanyName())
+                        .companyCategory(row.getCompanyCategory())
+                        .companyWebsite(row.getCompanyWebsite())
+                        .jobTitle(row.getJobTitle())
+                        .createdAt(OffsetDateTime.ofInstant(row.getCreatedAt(), ZoneId.systemDefault()))
+                        .build())
+                .collect(Collectors.toList());
+
         return RecentReviewResponse.builder()
                 .items(items)
                 .build();

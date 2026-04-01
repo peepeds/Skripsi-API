@@ -5,18 +5,17 @@ import com.example.skripsi.exceptions.*;
 import com.example.skripsi.interfaces.*;
 import com.example.skripsi.models.*;
 import com.example.skripsi.models.auth.*;
+import com.example.skripsi.models.constant.*;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseCookie;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Arrays;
 import java.util.Map;
 
-@Slf4j
 @RestController
 @RequestMapping("/auth")
 public class AuthController {
@@ -38,8 +37,8 @@ public class AuthController {
 
         return WebResponse.builder()
                 .success(true)
-                .message("Register success")
-                .result("Successfully Created Account")
+                .message(MessageConstants.Success.REGISTER_SUCCESS)
+                .result(MessageConstants.Success.SUCCESSFULLY_CREATED_ACCOUNT)
                 .build();
     }
 
@@ -48,16 +47,13 @@ public class AuthController {
             @Valid @RequestBody Login login,
             HttpServletResponse response
     ) {
-        log.info("process...");
         var result = authService.login(login);
 
-        log.info("create refresh cookies");
-
-        ResponseCookie cookie = ResponseCookie.from("refreshToken", result.getRefreshToken())
+        ResponseCookie cookie = ResponseCookie.from(CookieConstants.REFRESH_TOKEN_NAME, result.getRefreshToken())
                 .httpOnly(true)
                 .secure(true)
-                .path("/auth")
-                .sameSite("None")
+                .path(CookieConstants.REFRESH_TOKEN_PATH)
+                .sameSite(CookieConstants.SAME_SITE_POLICY)
                 .maxAge((int) (refreshTokenExpiration / 1000))
                 .build();
 
@@ -65,7 +61,7 @@ public class AuthController {
 
         return WebResponse.builder()
                 .success(true)
-                .message("Login success")
+                .message(MessageConstants.Success.LOGIN_SUCCESS)
                 .result(Map.of("accessToken", result.getAccessToken()))
                 .build();
     }
@@ -75,14 +71,14 @@ public class AuthController {
         String refreshToken = extractRefreshTokenFromCookie(request);
 
         if (refreshToken == null) {
-            throw new BadRequestExceptions("Missing refresh token");
+            throw new BadRequestExceptions(MessageConstants.Auth.MISSING_REFRESH_TOKEN);
         }
 
         var result = authService.refresh(refreshToken);
 
         return WebResponse.builder()
                 .success(true)
-                .message("New access token created")
+                .message(MessageConstants.Success.NEW_ACCESS_TOKEN_CREATED)
                 .result(Map.of("accessToken", result.getAccessToken()))
                 .build();
     }
@@ -98,16 +94,16 @@ public class AuthController {
             authService.logout(refreshToken);
         }
 
-        Cookie cookie = new Cookie("refreshToken", null);
+        Cookie cookie = new Cookie(CookieConstants.REFRESH_TOKEN_NAME, null);
         cookie.setHttpOnly(true);
         cookie.setSecure(true);
-        cookie.setPath("/auth");
+        cookie.setPath(CookieConstants.REFRESH_TOKEN_PATH);
         cookie.setMaxAge(0);
         response.addCookie(cookie);
 
         return WebResponse.builder()
                 .success(true)
-                .message("Logout success")
+                .message(MessageConstants.Success.LOGOUT_SUCCESS)
                 .build();
     }
 
@@ -116,7 +112,7 @@ public class AuthController {
         if (cookies == null) return null;
 
         return Arrays.stream(cookies)
-                .filter(c -> "refreshToken".equals(c.getName()))
+                .filter(cookie -> CookieConstants.REFRESH_TOKEN_NAME.equals(cookie.getName()))
                 .map(Cookie::getValue)
                 .findFirst()
                 .orElse(null);

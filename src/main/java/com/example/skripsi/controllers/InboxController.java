@@ -18,9 +18,9 @@ public class InboxController {
     @GetMapping("")
     @PreAuthorize("isAuthenticated()")
     public WebResponse<?> getInboxPreview(
-            @RequestParam(value = "page", defaultValue = "0") int page,
+            @RequestParam(value = "cursor", required = false) Long cursor,
             @RequestParam(value = "limit", defaultValue = "5") int limit) {
-        var results = inboxService.getUserInboxPreview(page, limit);
+        var results = inboxService.getUserInboxPreview(cursor, limit);
         return WebResponse.builder()
                 .success(true)
                 .message("Inbox fetched")

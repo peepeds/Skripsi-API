@@ -8,7 +8,7 @@ Base URL: `/auth`
 
 **Endpoint:** `POST /auth/register`
 
-**Access:** Publik (Tidak perlu login)
+**Access:** Public (tidak perlu login)
 
 **Deskripsi:** Membuat akun pengguna baru di sistem.
 

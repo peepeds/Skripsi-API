@@ -4,6 +4,7 @@ import com.example.skripsi.entities.*;
 import com.example.skripsi.interfaces.*;
 import com.example.skripsi.models.*;
 import com.example.skripsi.models.company.*;
+import com.example.skripsi.models.constant.*;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -19,23 +20,22 @@ public class CompanyController {
     }
 
     @GetMapping("")
-    public WebResponse<?> getCompanies(@RequestParam(value = "page", required = false) Integer page,
+    public WebResponse<?> getCompanies(@RequestParam(value = "cursor", required = false) Long cursor,
                                        @RequestParam(value = "limit", required = false) Integer limit,
                                        @RequestParam(value = "search", required = false) String search) {
         if (search != null && !search.isEmpty()) {
             var results = companyService.searchCompanies(search);
             return WebResponse.builder()
                     .success(true)
-                    .message("Successfully search companies")
+                    .message(MessageConstants.Success.SUCCESSFULLY_SEARCH_COMPANIES)
                     .result(results)
                     .build();
         } else {
-            int pageVal = page != null ? page : 0;
             int limitVal = limit != null ? limit : 15;
-            var results = companyService.getCompany(pageVal, limitVal);
+            var results = companyService.getCompany(cursor, limitVal);
             return WebResponse.builder()
                     .success(true)
-                    .message("Successfully Get Companies data")
+                    .message(MessageConstants.Success.SUCCESSFULLY_GET_COMPANIES)
                     .meta(results.getMeta())
                     .result(results.getResult())
                     .build();
@@ -48,7 +48,7 @@ public class CompanyController {
         var result = companyService.submitCompanyRequest(request);
         return WebResponse.builder()
                 .success(true)
-                .message("Successfully submit company request")
+                .message(MessageConstants.Success.SUCCESSFULLY_SUBMIT_COMPANY_REQUEST)
                 .result(result)
                 .build();
     }
@@ -56,12 +56,12 @@ public class CompanyController {
     @GetMapping("/requests")
     @PreAuthorize("hasRole('ADMIN')")
     public WebResponse<?> getCompanyRequests(@RequestParam(value = "status", required = false) CompanyRequestStatus status,
-                                             @RequestParam(value = "page", defaultValue = "0") int page,
+                                             @RequestParam(value = "cursor", required = false) Long cursor,
                                              @RequestParam(value = "limit", defaultValue = "15") int limit) {
-        var results = companyService.getCompanyRequests(status, page, limit);
+        var results = companyService.getCompanyRequests(status, cursor, limit);
         return WebResponse.builder()
                 .success(true)
-                .message("Successfully get company requests")
+                .message(MessageConstants.Success.SUCCESSFULLY_GET_COMPANY_REQUESTS)
                 .meta(results.getMeta())
                 .result(results.getResult())
                 .build();
@@ -74,7 +74,7 @@ public class CompanyController {
         var result = companyService.reviewCompanyRequest(requestId, request);
         return WebResponse.builder()
                 .success(true)
-                .message("Successfully review company request")
+                .message(MessageConstants.Success.SUCCESSFULLY_REVIEW_COMPANY_REQUEST)
                 .result(result)
                 .build();
     }
@@ -85,7 +85,7 @@ public class CompanyController {
         var result = companyService.getCompanyRequestDetail(requestId);
         return WebResponse.builder()
                 .success(true)
-                .message("Company request detail")
+                .message(MessageConstants.Success.COMPANY_REQUEST_DETAIL)
                 .result(result)
                 .build();
     }
@@ -95,7 +95,7 @@ public class CompanyController {
         var result = companyService.getTopCompaniesAvgRating();
         return WebResponse.builder()
                 .success(true)
-                .message("Successfully get top 10 companies by rating")
+                .message(MessageConstants.Success.SUCCESSFULLY_GET_TOP_10_COMPANIES)
                 .result(result)
                 .build();
     }
@@ -105,7 +105,7 @@ public class CompanyController {
         var result = companyService.getCompanyBySlug(slug);
         return WebResponse.builder()
                 .success(true)
-                .message("Successfully get company profile")
+                .message(MessageConstants.Success.SUCCESSFULLY_GET_COMPANY_PROFILE)
                 .result(result)
                 .build();
     }

@@ -7,13 +7,23 @@ import com.example.skripsi.models.company.*;
 import java.util.List;
 
 public interface ICompanyService {
-    PageResponse<CompanyOptionsResponse> getCompany(int page, int limit);
+    CursorPageResponse<CompanyOptionsResponse> getCompany(Long cursor, int limit);
 
     CompanyOptionsResponse getCompanyBySlug(String slug);
 
+    Long getCompanyIdBySlug(String slug);
+
+    String getCompanyRequestName(Long requestId);
+
+    CursorPageResponse<CompanyOptionsResponse> getCompaniesBySubCategoryId(Long subCategoryId, Long cursor, int limit);
+
+    CursorPageResponse<CompanyOptionsResponse> getCompaniesBySubCategoryIdViaProfile(Long subCategoryId, Long cursor, int limit);
+
+    CursorPageResponse<CompanyOptionsResponse> getCompaniesBySubCategoryNameViaProfile(String subCategoryName, Long cursor, int limit);
+
     CompanyRequestResponse submitCompanyRequest(CreateCompanyRequestRequest request);
 
-    PageResponse<CompanyRequestResponse> getCompanyRequests(CompanyRequestStatus status, int page, int limit);
+    CursorPageResponse<CompanyRequestResponse> getCompanyRequests(CompanyRequestStatus status, Long cursor, int limit);
 
     CompanyRequestResponse reviewCompanyRequest(Long requestId, ReviewCompanyRequestRequest request);
 
@@ -22,4 +32,6 @@ public interface ICompanyService {
     List<CompanyOptionsResponse> searchCompanies(String search);
 
     List<CompanyOptionsResponse> getTopCompaniesAvgRating();
+
+    Boolean isCompanyRequestOwner(Long requestId, Long userId);
 }

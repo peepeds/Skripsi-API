@@ -5,16 +5,22 @@ import com.example.skripsi.exceptions.*;
 import com.example.skripsi.interfaces.*;
 import com.example.skripsi.models.*;
 import com.example.skripsi.models.company.*;
+import com.example.skripsi.models.constant.*;
 import com.example.skripsi.repositories.*;
 import com.example.skripsi.securities.*;
+import com.example.skripsi.utilities.NotificationHelper;
 import jakarta.transaction.Transactional;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -24,105 +30,112 @@ public class CompanyService implements ICompanyService {
 
     private final CompanyRepository companyRepository;
     private final CompanyRequestRepository companyRequestRepository;
-    private final NotificationRepository notificationRepository;
-    private final UserNotificationRepository userNotificationRepository;
-    private final UserCertificateRequestRepository documentRepository;
     private final CompanyProfileRepository companyProfileRepository;
     private final AuditService auditService;
     private final SecurityUtils securityUtils;
-    private final UserRepository userRepository;
-    private final SubCategoryRepository subCategoryRepository;
-    private final InternshipDetailRepository internshipDetailRepository;
+    private final IUserService userService;
+    private final ICategoryService categoryService;
+    private final IReviewService reviewService;
+    private final NotificationHelper notificationHelper;
 
     public CompanyService(CompanyRepository companyRepository,
                           CompanyRequestRepository companyRequestRepository,
-                          NotificationRepository notificationRepository,
-                          UserNotificationRepository userNotificationRepository,
-                          UserCertificateRequestRepository documentRepository,
-                          AuditService auditService,
+                          @Lazy AuditService auditService,
                           SecurityUtils securityUtils,
-                          UserRepository userRepository,
+                          IUserService userService,
                           CompanyProfileRepository companyProfileRepository,
-                          SubCategoryRepository subCategoryRepository,
-                          InternshipDetailRepository internshipDetailRepository) {
+                          @Lazy ICategoryService categoryService,
+                          @Lazy IReviewService reviewService,
+                          NotificationHelper notificationHelper) {
         this.companyRepository = companyRepository;
         this.companyRequestRepository = companyRequestRepository;
-        this.notificationRepository = notificationRepository;
-        this.userNotificationRepository = userNotificationRepository;
-        this.documentRepository = documentRepository;
         this.auditService = auditService;
         this.securityUtils = securityUtils;
-        this.userRepository = userRepository;
+        this.userService = userService;
         this.companyProfileRepository = companyProfileRepository;
-        this.subCategoryRepository = subCategoryRepository;
-        this.internshipDetailRepository = internshipDetailRepository;
+        this.categoryService = categoryService;
+        this.reviewService = reviewService;
+        this.notificationHelper = notificationHelper;
+    }
+
+    private static class CompanyEnrichmentData {
+        final Map<Long, Double> ratingMap;
+        final Map<Long, Long> reviewCountMap;
+        final Map<Long, CompanyProfile> profileMap;
+        final Map<Long, String> subcategoryNameMap;
+
+        CompanyEnrichmentData(Map<Long, Double> ratingMap,
+                              Map<Long, Long> reviewCountMap,
+                              Map<Long, CompanyProfile> profileMap,
+                              Map<Long, String> subcategoryNameMap) {
+            this.ratingMap = ratingMap;
+            this.reviewCountMap = reviewCountMap;
+            this.profileMap = profileMap;
+            this.subcategoryNameMap = subcategoryNameMap;
+        }
+    }
+
+    private CompanyEnrichmentData fetchEnrichmentData(List<Long> companyIds) {
+        if (companyIds.isEmpty()) {
+            return new CompanyEnrichmentData(new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>());
+        }
+
+        Map<Long, Double> ratingMap = reviewService.getRatingsByCompanyIds(companyIds);
+        Map<Long, Long> reviewCountMap = reviewService.getReviewCountsByCompanyIds(companyIds);
+
+        List<CompanyProfile> profiles = companyProfileRepository.findByCompanyIds(companyIds);
+        Map<Long, CompanyProfile> profileMap = new HashMap<>();
+        for (CompanyProfile profile : profiles) {
+            profileMap.put(profile.getCompanyId(), profile);
+        }
+
+        List<Long> subcategoryIds = profiles.stream()
+                .map(CompanyProfile::getSubcategoryId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+        Map<Long, String> subcategoryNameMap = categoryService.getSubCategoryNameMap(subcategoryIds);
+
+        return new CompanyEnrichmentData(ratingMap, reviewCountMap, profileMap, subcategoryNameMap);
     }
 
     @Override
-    public PageResponse<CompanyOptionsResponse> getCompany(int page, int limit) {
-        final int MAX_TOTAL_ELEMENTS = 1000;
-        int requestedOffset = page * limit;
-        if (requestedOffset >= MAX_TOTAL_ELEMENTS) {
-            throw new BadRequestExceptions("limit exceeded");
-        }
-        Pageable pageable = PageRequest.of(page, limit);
+    public CursorPageResponse<CompanyOptionsResponse> getCompany(Long cursor, int limit) {
+        Pageable pageable = PageRequest.of(0, PaginationConstants.DEFAULT_PAGE_FETCH_SIZE);
         Page<Company> companies = companyRepository.findAll(pageable);
 
-        List<Long> companyIds = companies.getContent().stream()
+        List<Company> allCompanies = companies.getContent().stream()
+                .filter(company -> cursor == null || company.getCompanyId() > cursor)
+                .collect(Collectors.toList());
+
+        List<Company> paginatedCompanies = allCompanies.stream()
+                .limit(limit)
+                .collect(Collectors.toList());
+
+        boolean hasMore = allCompanies.size() > limit;
+
+        List<Long> companyIds = paginatedCompanies.stream()
                 .map(Company::getCompanyId)
                 .collect(Collectors.toList());
 
-        final java.util.Map<Long, Double> ratingMap = new java.util.HashMap<>();
-        final java.util.Map<Long, Long> reviewCountMap = new java.util.HashMap<>();
-        final java.util.Map<Long, CompanyProfile> profileMap = new java.util.HashMap<>();
-        final java.util.Map<Long, SubCategory> subcategoryMap = new java.util.HashMap<>();
+        CompanyEnrichmentData enrichment = fetchEnrichmentData(companyIds);
 
-        if (!companyIds.isEmpty()) {
-            List<Object[]> ratings = internshipDetailRepository.findAverageRatingsByCompanyIds(companyIds);
-            for (Object[] row : ratings) {
-                Long companyId = ((Number) row[0]).longValue();
-                Double avgRating = row[1] != null ? ((Number) row[1]).doubleValue() : null;
-                ratingMap.put(companyId, avgRating);
-            }
-
-            List<Object[]> reviewCountData = internshipDetailRepository.findReviewCountsByCompanyIds(companyIds);
-            for (Object[] row : reviewCountData) {
-                Long companyId = ((Number) row[0]).longValue();
-                Long reviewCount = ((Number) row[1]).longValue();
-                reviewCountMap.put(companyId, reviewCount);
-            }
-
-            List<CompanyProfile> profiles = companyProfileRepository.findByCompanyIds(companyIds);
-            for (CompanyProfile profile : profiles) {
-                profileMap.put(profile.getCompanyId(), profile);
-            }
-
-            List<Long> subcategoryIds = profiles.stream()
-                    .map(CompanyProfile::getSubcategoryId)
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toList());
-
-            if (!subcategoryIds.isEmpty()) {
-                List<SubCategory> subCategories = subCategoryRepository.findBySubCategoryIds(subcategoryIds);
-                for (SubCategory subCat : subCategories) {
-                    subcategoryMap.put(subCat.getSubCategoryId(), subCat);
-                }
-            }
-        }
-
-        List<CompanyOptionsResponse> results = companies.getContent().stream()
-                .map(company -> toOptionsResponse(company, ratingMap.get(company.getCompanyId()), reviewCountMap.get(company.getCompanyId()), profileMap, subcategoryMap))
+        List<CompanyOptionsResponse> results = paginatedCompanies.stream()
+                .map(company -> toOptionsResponse(company, enrichment))
                 .collect(Collectors.toList());
 
-        long cappedTotalElements = Math.min(companies.getTotalElements(), MAX_TOTAL_ELEMENTS);
-        return PageResponse.<CompanyOptionsResponse>builder()
+        Long nextCursor = null;
+        if (!results.isEmpty() && hasMore) {
+            nextCursor = results.get(results.size() - 1).getCompanyId();
+        }
+
+        return CursorPageResponse.<CompanyOptionsResponse>builder()
                 .result(results)
-                .meta(PageResponse.Meta.builder()
-                        .page(page).size(limit)
-                        .totalElements(cappedTotalElements)
-                        .totalPages(calculateTotalPages(cappedTotalElements, limit))
-                        .hasNext(hasNextPage(page, limit, cappedTotalElements))
-                        .hasPrevious(page > 0)
+                .meta(CursorPageResponse.Meta.builder()
+                        .nextCursor(nextCursor)
+                        .previousCursor(cursor)
+                        .size(results.size())
+                        .hasMore(hasMore)
                         .build())
                 .build();
     }
@@ -148,53 +161,68 @@ public class CompanyService implements ICompanyService {
                 .build();
         CompanyRequest savedRequest = companyRequestRepository.save(companyRequest);
 
-        // Create notification (the payload)
-        Notification notification = Notification.builder()
-                .type("COMPANY_REQUEST")
-                .action("SUBMITTED")
-                .referenceId(savedRequest.getCompanyRequestId())
-                .actorId(userId)
-                .createdAt(OffsetDateTime.now())
-                .build();
-        Notification savedNotification = notificationRepository.save(notification);
+        notificationHelper.createNotificationWithUserNotification(
+                EntityTypeConstants.COMPANY_REQUEST,
+                ActionConstants.SUBMITTED,
+                savedRequest.getCompanyRequestId(),
+                userId,
+                userId);
 
-        // Create user_notification (recipient + read status)
-        UserNotification userNotification = UserNotification.builder()
-                .notification(savedNotification)
-                .userId(userId)
-                .isRead(false)
-                .createdAt(OffsetDateTime.now())
-                .build();
-        userNotificationRepository.save(userNotification);
-
-        auditService.record("COMPANY_REQUEST", savedRequest.getCompanyRequestId(), "SUBMITTED", userId);
+        auditService.record(EntityTypeConstants.COMPANY_REQUEST, savedRequest.getCompanyRequestId(), ActionConstants.SUBMITTED, userId);
 
         return toRequestResponse(savedRequest);
     }
 
     @Override
-    public PageResponse<CompanyRequestResponse> getCompanyRequests(CompanyRequestStatus status, int page, int limit) {
-        final int MAX_TOTAL_ELEMENTS = 1000;
-        int requestedOffset = page * limit;
-        if (requestedOffset >= MAX_TOTAL_ELEMENTS) {
-            throw new BadRequestExceptions("limit exceeded");
-        }
-        Pageable pageable = PageRequest.of(page, limit);
-        Page<CompanyRequestResponse> pageResult = (status == null
+    public CursorPageResponse<CompanyRequestResponse> getCompanyRequests(CompanyRequestStatus status, Long cursor, int limit) {
+        Pageable pageable = PageRequest.of(0, PaginationConstants.DEFAULT_PAGE_FETCH_SIZE);
+        Page<CompanyRequest> pageResult = (status == null
                 ? companyRequestRepository.findAll(pageable)
-                : companyRequestRepository.findByStatus(status, pageable))
-                .map(this::toRequestResponse);
-        long cappedTotalElements = Math.min(pageResult.getTotalElements(), MAX_TOTAL_ELEMENTS);
-        return PageResponse.<CompanyRequestResponse>builder()
-                .result(pageResult.getContent())
-                .meta(PageResponse.Meta.builder()
-                        .page(page).size(limit)
-                        .totalElements(cappedTotalElements)
-                        .totalPages(calculateTotalPages(cappedTotalElements, limit))
-                        .hasNext(hasNextPage(page, limit, cappedTotalElements))
-                        .hasPrevious(page > 0)
+                : companyRequestRepository.findByStatus(status, pageable));
+
+        List<CompanyRequestResponse> allItems = pageResult.getContent().stream()
+                .map(this::toRequestResponse)
+                .collect(Collectors.toList());
+
+        return buildCursorPageResponse(allItems, cursor, limit);
+    }
+
+    private CursorPageResponse<CompanyRequestResponse> buildCursorPageResponse(
+            List<CompanyRequestResponse> allItems, Long cursor, int limit) {
+        List<CompanyRequestResponse> filteredItems = filterItemsByCursor(allItems, cursor, limit);
+        boolean hasMore = calculateHasMore(allItems, cursor, limit);
+        Long nextCursor = calculateNextCursor(filteredItems, hasMore);
+
+        return CursorPageResponse.<CompanyRequestResponse>builder()
+                .result(filteredItems)
+                .meta(CursorPageResponse.Meta.builder()
+                        .nextCursor(nextCursor)
+                        .previousCursor(cursor)
+                        .size(filteredItems.size())
+                        .hasMore(hasMore)
                         .build())
                 .build();
+    }
+
+    private List<CompanyRequestResponse> filterItemsByCursor(
+            List<CompanyRequestResponse> allItems, Long cursor, int limit) {
+        return allItems.stream()
+                .filter(item -> cursor == null || item.getCompanyRequestId() > cursor)
+                .limit(limit)
+                .collect(Collectors.toList());
+    }
+
+    private boolean calculateHasMore(List<CompanyRequestResponse> allItems, Long cursor, int limit) {
+        return allItems.stream()
+                .filter(item -> cursor == null || item.getCompanyRequestId() > cursor)
+                .count() > limit;
+    }
+
+    private Long calculateNextCursor(List<CompanyRequestResponse> filteredItems, boolean hasMore) {
+        if (!filteredItems.isEmpty() && hasMore) {
+            return filteredItems.get(filteredItems.size() - 1).getCompanyRequestId();
+        }
+        return null;
     }
 
     @Override
@@ -202,76 +230,72 @@ public class CompanyService implements ICompanyService {
         Long reviewerId = securityUtils.getCurrentUserId();
 
         CompanyRequest companyRequest = companyRequestRepository.findById(requestId)
-                .orElseThrow(() -> new BadRequestExceptions("Company request not found"));
+                .orElseThrow(() -> new BadRequestExceptions(MessageConstants.NotFound.COMPANY_REQUEST_NOT_FOUND));
 
-        // Locking: prevent re-review if already finalized
-        if (companyRequest.getStatus() == CompanyRequestStatus.APPROVED
-                || companyRequest.getStatus() == CompanyRequestStatus.REJECTED) {
-            throw new BadRequestExceptions("Company request has already been "
-                    + companyRequest.getStatus().name().toLowerCase() + " and cannot be changed");
-        }
+        validateCompanyRequestNotFinalized(companyRequest);
 
         if (request.getStatus() == CompanyRequestStatus.APPROVED) {
-            Company savedCompany = companyRepository.save(Company.builder()
-                    .companyName(companyRequest.getCompanyName())
-                    .companyAbbreviation(companyRequest.getCompanyAbbreviation())
-                    .createdBy(reviewerId)
-                    .build());
-            companyProfileRepository.save(CompanyProfile.builder()
-                    .companyId(savedCompany.getCompanyId())
-                    .website(companyRequest.getWebsite())
-                    .bio("")
-                    .isPartner(false)
-                    .subcategoryId(companyRequest.getSubcategoryId())
-                    .createdAt(OffsetDateTime.now())
-                    .createdBy(reviewerId)
-                    .build());
+            createApprovedCompany(companyRequest, reviewerId);
         }
 
+        updateCompanyRequestStatus(companyRequest, request, reviewerId);
+        CompanyRequest savedRequest = companyRequestRepository.save(companyRequest);
+
+        String actionLabel = getActionLabel(request.getStatus());
+        updateNotifications(requestId, actionLabel, reviewerId, companyRequest);
+
+        auditService.record(EntityTypeConstants.COMPANY_REQUEST, requestId, actionLabel, reviewerId, request.getReviewNote());
+
+        return toRequestResponse(savedRequest);
+    }
+
+    private void validateCompanyRequestNotFinalized(CompanyRequest companyRequest) {
+        if (companyRequest.getStatus() == CompanyRequestStatus.APPROVED
+                || companyRequest.getStatus() == CompanyRequestStatus.REJECTED) {
+            throw new BadRequestExceptions(MessageConstants.Company.COMPANY_REQUEST_ALREADY_FINALIZED
+                    + companyRequest.getStatus().name().toLowerCase() + MessageConstants.Company.AND_CANNOT_BE_CHANGED);
+        }
+    }
+
+    private void createApprovedCompany(CompanyRequest companyRequest, Long reviewerId) {
+        Company savedCompany = companyRepository.save(Company.builder()
+                .companyName(companyRequest.getCompanyName())
+                .companyAbbreviation(companyRequest.getCompanyAbbreviation())
+                .createdBy(reviewerId)
+                .build());
+        companyProfileRepository.save(CompanyProfile.builder()
+                .companyId(savedCompany.getCompanyId())
+                .website(companyRequest.getWebsite())
+                .bio("")
+                .isPartner(false)
+                .subcategoryId(companyRequest.getSubcategoryId())
+                .createdAt(OffsetDateTime.now())
+                .createdBy(reviewerId)
+                .build());
+    }
+
+    private void updateCompanyRequestStatus(CompanyRequest companyRequest,
+                                            ReviewCompanyRequestRequest request, Long reviewerId) {
         companyRequest.setStatus(request.getStatus());
         companyRequest.setReviewNote(request.getReviewNote());
         companyRequest.setReviewedAt(OffsetDateTime.now());
         companyRequest.setReviewedBy(reviewerId);
         companyRequest.setUpdatedAt(OffsetDateTime.now());
         companyRequest.setUpdatedBy(reviewerId);
-        CompanyRequest savedRequest = companyRequestRepository.save(companyRequest);
+    }
 
-        String actionLabel = request.getStatus() == CompanyRequestStatus.APPROVED ? "APPROVED" : "REJECTED";
+    private String getActionLabel(CompanyRequestStatus status) {
+        return status == CompanyRequestStatus.APPROVED ? ActionConstants.APPROVED : ActionConstants.REJECTED;
+    }
 
-        // Update the existing notification for the review action
-        List<Notification> existingNotifications = notificationRepository.findByTypeAndReferenceId("COMPANY_REQUEST", requestId);
+    private void updateNotifications(Long requestId, String actionLabel, Long reviewerId, CompanyRequest companyRequest) {
+        List<Notification> existingNotifications = userService.findNotificationsByTypeAndReferenceId(EntityTypeConstants.COMPANY_REQUEST, requestId);
         if (existingNotifications.isEmpty()) {
-            throw new BadRequestExceptions("Notification not found for company request");
+            throw new BadRequestExceptions(MessageConstants.NotFound.NOTIFICATION_NOT_FOUND);
         }
         Notification existingNotification = existingNotifications.get(0);
-        existingNotification.setAction(actionLabel);
-        existingNotification.setActorId(reviewerId);
-        existingNotification.setCreatedAt(OffsetDateTime.now());
-        Notification savedReviewNotif = notificationRepository.save(existingNotification);
-
-        // Check if the user already has a UserNotification for this notification
-        boolean userNotifExists = userNotificationRepository.existsByUserIdAndNotification_NotificationId(companyRequest.getCreatedBy(), savedReviewNotif.getNotificationId());
-        if (!userNotifExists) {
-            // Notify the original requester if not already notified
-            UserNotification reviewUserNotif = UserNotification.builder()
-                    .notification(savedReviewNotif)
-                    .userId(companyRequest.getCreatedBy())
-                    .isRead(false)
-                    .createdAt(OffsetDateTime.now())
-                    .build();
-            userNotificationRepository.save(reviewUserNotif);
-        } else {
-            // Update the existing UserNotification's createdAt to reflect the latest action
-            UserNotification existingUserNotif = userNotificationRepository.findByUserIdAndNotification_NotificationId(companyRequest.getCreatedBy(), savedReviewNotif.getNotificationId());
-            if (existingUserNotif != null) {
-                existingUserNotif.setCreatedAt(OffsetDateTime.now());
-                userNotificationRepository.save(existingUserNotif);
-            }
-        }
-
-        auditService.record("COMPANY_REQUEST", requestId, actionLabel, reviewerId, request.getReviewNote());
-
-        return toRequestResponse(savedRequest);
+        notificationHelper.updateNotificationAction(existingNotification, actionLabel, reviewerId);
+        notificationHelper.updateOrCreateUserNotification(existingNotification, companyRequest.getCreatedBy());
     }
 
     @Override
@@ -279,11 +303,11 @@ public class CompanyService implements ICompanyService {
         Long currentUserId = securityUtils.getCurrentUserId();
 
         CompanyRequest companyRequest = companyRequestRepository.findById(requestId)
-                .orElseThrow(() -> new BadRequestExceptions("Company request not found"));
+                .orElseThrow(() -> new BadRequestExceptions(MessageConstants.NotFound.COMPANY_REQUEST_NOT_FOUND));
 
         // Only the owner of the request may view its detail
         if (!companyRequest.getCreatedBy().equals(currentUserId)) {
-            throw new CustomAccesDeniedExceptions("Access denied: you can only view your own company requests");
+            throw new CustomAccessDeniedException(MessageConstants.NotFound.ACCESS_DENIED_OWN_REQUESTS);
         }
 
         return toDetailResponse(companyRequest);
@@ -301,136 +325,45 @@ public class CompanyService implements ICompanyService {
                 .map(CompanyOptionsResponse::getCompanyId)
                 .collect(Collectors.toList());
 
-        final java.util.Map<Long, Double> ratingMap = new java.util.HashMap<>();
-        final java.util.Map<Long, Long> reviewCountMap = new java.util.HashMap<>();
-        final java.util.Map<Long, CompanyProfile> profileMap = new java.util.HashMap<>();
-        final java.util.Map<Long, SubCategory> subcategoryMap = new java.util.HashMap<>();
+        CompanyEnrichmentData enrichment = fetchEnrichmentData(companyIds);
 
-        List<Object[]> ratings = internshipDetailRepository.findAverageRatingsByCompanyIds(companyIds);
-        for (Object[] row : ratings) {
-            Long companyId = ((Number) row[0]).longValue();
-            Double avgRating = row[1] != null ? ((Number) row[1]).doubleValue() : null;
-            ratingMap.put(companyId, avgRating);
-        }
-
-        List<Object[]> reviewCountData = internshipDetailRepository.findReviewCountsByCompanyIds(companyIds);
-        for (Object[] row : reviewCountData) {
-            Long companyId = ((Number) row[0]).longValue();
-            Long reviewCount = ((Number) row[1]).longValue();
-            reviewCountMap.put(companyId, reviewCount);
-        }
-
-        List<CompanyProfile> profiles = companyProfileRepository.findByCompanyIds(companyIds);
-        for (CompanyProfile profile : profiles) {
-            profileMap.put(profile.getCompanyId(), profile);
-        }
-
-        List<Long> subcategoryIds = profiles.stream()
-                .map(CompanyProfile::getSubcategoryId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-
-        if (!subcategoryIds.isEmpty()) {
-            List<SubCategory> subCategories = subCategoryRepository.findBySubCategoryIds(subcategoryIds);
-            for (SubCategory subCat : subCategories) {
-                subcategoryMap.put(subCat.getSubCategoryId(), subCat);
-            }
-        }
-
-        List<Company> companies = companyRepository.findAllById(companyIds);
-        java.util.Map<Long, Company> companyMap = new java.util.HashMap<>();
-        for (Company company : companies) {
-            companyMap.put(company.getCompanyId(), company);
-        }
+        Map<Long, Company> companyMap = companyRepository.findAllById(companyIds).stream()
+                .collect(Collectors.toMap(Company::getCompanyId, company -> company));
 
         return searchResults.stream()
                 .map(result -> {
                     Company company = companyMap.get(result.getCompanyId());
-                    if (company == null) {
-                        return result;
-                    }
-                    return toOptionsResponse(company, ratingMap.get(company.getCompanyId()), reviewCountMap.get(company.getCompanyId()), profileMap, subcategoryMap);
+                    return company != null ? toOptionsResponse(company, enrichment) : result;
                 })
                 .collect(Collectors.toList());
     }
 
     public List<CompanyOptionsResponse> getTopCompaniesAvgRating() {
-        List<Object[]> topCompanies = internshipDetailRepository.findTop10CompaniesByAverageRating();
+        List<Long> companyIds = reviewService.getTop10CompanyIdsByRating();
 
-        if (topCompanies.isEmpty()) {
+        if (companyIds.isEmpty()) {
             return List.of();
         }
 
-        List<Long> companyIds = topCompanies.stream()
-                .map(row -> ((Number) row[0]).longValue())
-                .collect(Collectors.toList());
+        CompanyEnrichmentData enrichment = fetchEnrichmentData(companyIds);
 
-        final java.util.Map<Long, Double> ratingMap = new java.util.HashMap<>();
-        final java.util.Map<Long, Long> reviewCountMap = new java.util.HashMap<>();
-        final java.util.Map<Long, CompanyProfile> profileMap = new java.util.HashMap<>();
-        final java.util.Map<Long, SubCategory> subcategoryMap = new java.util.HashMap<>();
+        Map<Long, Company> companyMap = companyRepository.findAllById(companyIds).stream()
+                .collect(Collectors.toMap(Company::getCompanyId, company -> company));
 
-        for (Object[] row : topCompanies) {
-            Long companyId = ((Number) row[0]).longValue();
-            Double avgRating = row[1] != null ? ((Number) row[1]).doubleValue() : null;
-            ratingMap.put(companyId, avgRating);
-        }
-
-        List<Object[]> reviewCountData = internshipDetailRepository.findReviewCountsByCompanyIds(companyIds);
-        for (Object[] row : reviewCountData) {
-            Long companyId = ((Number) row[0]).longValue();
-            Long reviewCount = ((Number) row[1]).longValue();
-            reviewCountMap.put(companyId, reviewCount);
-        }
-
-        List<CompanyProfile> profiles = companyProfileRepository.findByCompanyIds(companyIds);
-        for (CompanyProfile profile : profiles) {
-            profileMap.put(profile.getCompanyId(), profile);
-        }
-
-        List<Long> subcategoryIds = profiles.stream()
-                .map(CompanyProfile::getSubcategoryId)
+        return companyIds.stream()
+                .map(companyMap::get)
                 .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-
-        if (!subcategoryIds.isEmpty()) {
-            List<SubCategory> subCategories = subCategoryRepository.findBySubCategoryIds(subcategoryIds);
-            for (SubCategory subCat : subCategories) {
-                subcategoryMap.put(subCat.getSubCategoryId(), subCat);
-            }
-        }
-
-        List<Company> companies = companyRepository.findAllById(companyIds);
-        java.util.Map<Long, Company> companyMap = companies.stream()
-                .collect(Collectors.toMap(Company::getCompanyId, c -> c));
-
-        return topCompanies.stream()
-                .map(row -> {
-                    Long companyId = ((Number) row[0]).longValue();
-                    Company company = companyMap.get(companyId);
-                    if (company == null) return null;
-                    return toOptionsResponse(company, ratingMap.get(companyId), reviewCountMap.get(companyId), profileMap, subcategoryMap);
-                })
-                .filter(Objects::nonNull)
+                .map(company -> toOptionsResponse(company, enrichment))
                 .collect(Collectors.toList());
     }
 
-    private int calculateTotalPages(long totalElements, int limit) {
-        return (int) Math.ceil((double) totalElements / limit);
-    }
+    private CompanyOptionsResponse toOptionsResponse(Company company, CompanyEnrichmentData enrichment) {
+        CompanyProfile profile = enrichment.profileMap.get(company.getCompanyId());
+        String subcategoryName = (profile != null && profile.getSubcategoryId() != null)
+                ? enrichment.subcategoryNameMap.get(profile.getSubcategoryId())
+                : null;
 
-    private boolean hasNextPage(int page, int limit, long totalElements) {
-        return (long) (page + 1) * limit < totalElements;
-    }
-
-    private CompanyOptionsResponse toOptionsResponse(Company company, Double rating, Long totalReviews, java.util.Map<Long, CompanyProfile> profileMap, java.util.Map<Long, SubCategory> subcategoryMap) {
-        CompanyProfile profile = profileMap.get(company.getCompanyId());
-        String subcategoryName = null;
-
-        if (profile != null && profile.getSubcategoryId() != null) {
-            SubCategory subCategory = subcategoryMap.get(profile.getSubcategoryId());
-            subcategoryName = subCategory != null ? subCategory.getSubCategoryName() : null;
-        }
+        Long totalReviews = enrichment.reviewCountMap.getOrDefault(company.getCompanyId(), 0L);
 
         return CompanyOptionsResponse.builder()
                 .companyId(company.getCompanyId())
@@ -440,8 +373,8 @@ public class CompanyService implements ICompanyService {
                 .isPartner(profile != null ? profile.getIsPartner() : null)
                 .subcategoryName(subcategoryName)
                 .companySlug(company.getCompanySlug())
-                .rating(rating)
-                .totalReviews(totalReviews != null ? totalReviews : 0L)
+                .rating(enrichment.ratingMap.get(company.getCompanyId()))
+                .totalReviews(totalReviews)
                 .build();
     }
 
@@ -467,10 +400,10 @@ public class CompanyService implements ICompanyService {
         String reviewedBy = companyRequest.getReviewedBy() != null
                 ? resolveUserName(companyRequest.getReviewedBy()) : null;
 
-        List<CompanyRequestDetailResponse.DocumentResponse> documents = notificationRepository
-                .findByTypeAndReferenceId("COMPANY_REQUEST", companyRequest.getCompanyRequestId())
+        List<CompanyRequestDetailResponse.DocumentResponse> documents = userService
+                .findNotificationsByTypeAndReferenceId(EntityTypeConstants.COMPANY_REQUEST, companyRequest.getCompanyRequestId())
                 .stream()
-                .flatMap(notif -> documentRepository.findByNotification_NotificationId(notif.getNotificationId()).stream())
+                .flatMap(notif -> userService.findUserCertificateRequestsByNotificationId(notif.getNotificationId()).stream())
                 .map(d -> CompanyRequestDetailResponse.DocumentResponse.builder()
                         .fileName(d.getDocumentName())
                         .url(d.getDocumentUrl())
@@ -497,10 +430,71 @@ public class CompanyService implements ICompanyService {
                 .build();
     }
 
-
     private String resolveUserName(Long userId) {
-        if (userId == null) return null;
-        return userRepository.findByUserId(userId).map(User::getFirstName).orElse(null);
+        return userService.resolveUserName(userId);
+    }
+
+    @Override
+    public Long getCompanyIdBySlug(String slug) {
+        Company company = companyRepository.findByCompanySlug(slug);
+        if (company == null) {
+            throw new ResourceNotFoundException("Company with slug '" + slug + "' not found");
+        }
+        return company.getCompanyId();
+    }
+
+    @Override
+    public String getCompanyRequestName(Long requestId) {
+        return companyRequestRepository.findById(requestId)
+                .map(CompanyRequest::getCompanyName)
+                .orElse("Unknown");
+    }
+
+    @Override
+    public CursorPageResponse<CompanyOptionsResponse> getCompaniesBySubCategoryId(Long subCategoryId, Long cursor, int limit) {
+        Pageable pageable = PageRequest.of(0, PaginationConstants.DEFAULT_PAGE_FETCH_SIZE);
+        Page<CompanyOptionsResponse> pageResult = companyRepository.findCompaniesBySubCategoryId(subCategoryId, pageable);
+        return buildCompanyOptionsCursorPage(pageResult.getContent(), cursor, limit);
+    }
+
+    @Override
+    public CursorPageResponse<CompanyOptionsResponse> getCompaniesBySubCategoryIdViaProfile(Long subCategoryId, Long cursor, int limit) {
+        Pageable pageable = PageRequest.of(0, PaginationConstants.DEFAULT_PAGE_FETCH_SIZE);
+        Page<CompanyOptionsResponse> pageResult = companyRepository.findCompaniesBySubCategoryIdViaProfile(subCategoryId, pageable);
+        return buildCompanyOptionsCursorPage(pageResult.getContent(), cursor, limit);
+    }
+
+    @Override
+    public CursorPageResponse<CompanyOptionsResponse> getCompaniesBySubCategoryNameViaProfile(String subCategoryName, Long cursor, int limit) {
+        Pageable pageable = PageRequest.of(0, PaginationConstants.DEFAULT_PAGE_FETCH_SIZE);
+        Page<CompanyOptionsResponse> pageResult = companyRepository.findCompaniesBySubCategoryNameViaProfile(subCategoryName, pageable);
+        return buildCompanyOptionsCursorPage(pageResult.getContent(), cursor, limit);
+    }
+
+    private CursorPageResponse<CompanyOptionsResponse> buildCompanyOptionsCursorPage(
+            List<CompanyOptionsResponse> allItems, Long cursor, int limit) {
+        List<CompanyOptionsResponse> filteredItems = allItems.stream()
+                .filter(item -> cursor == null || item.getCompanyId() > cursor)
+                .limit(limit)
+                .collect(Collectors.toList());
+
+        boolean hasMore = allItems.stream()
+                .filter(item -> cursor == null || item.getCompanyId() > cursor)
+                .count() > limit;
+
+        Long nextCursor = (!filteredItems.isEmpty() && hasMore)
+                ? filteredItems.get(filteredItems.size() - 1).getCompanyId()
+                : null;
+
+        return CursorPageResponse.<CompanyOptionsResponse>builder()
+                .result(filteredItems)
+                .meta(CursorPageResponse.Meta.builder()
+                        .nextCursor(nextCursor)
+                        .previousCursor(cursor)
+                        .size(filteredItems.size())
+                        .hasMore(hasMore)
+                        .build())
+                .build();
     }
 
     @Override
@@ -515,29 +509,11 @@ public class CompanyService implements ICompanyService {
             throw new BadRequestExceptions("Company profile not found");
         }
 
-        String subcategoryName = null;
-        if (profile.getSubcategoryId() != null) {
-            SubCategory subCategory = subCategoryRepository.findById(profile.getSubcategoryId()).orElse(null);
-            subcategoryName = subCategory != null ? subCategory.getSubCategoryName() : null;
-        }
+        CompanyEnrichmentData enrichment = fetchEnrichmentData(Collections.singletonList(company.getCompanyId()));
 
-        Double rating = null;
-        Long totalReviews = 0L;
-
-        List<Object[]> ratingData = internshipDetailRepository.findAverageRatingsByCompanyIds(
-                java.util.Collections.singletonList(company.getCompanyId())
-        );
-        if (!ratingData.isEmpty()) {
-            rating = ((Number) ratingData.get(0)[1]).doubleValue();
-        }
-
-        List<Object[]> reviewCountData = internshipDetailRepository.findReviewCountsByCompanyIds(
-                java.util.Collections.singletonList(company.getCompanyId())
-        );
-        if (!reviewCountData.isEmpty()) {
-            Object[] row = reviewCountData.get(0);
-            totalReviews = ((Number) row[1]).longValue();
-        }
+        String subcategoryName = profile.getSubcategoryId() != null
+                ? enrichment.subcategoryNameMap.get(profile.getSubcategoryId())
+                : null;
 
         return CompanyOptionsResponse.builder()
                 .companyId(company.getCompanyId())
@@ -547,20 +523,27 @@ public class CompanyService implements ICompanyService {
                 .isPartner(profile.getIsPartner())
                 .subcategoryName(subcategoryName)
                 .companySlug(company.getCompanySlug())
-                .rating(rating)
-                .totalReviews(totalReviews)
+                .rating(enrichment.ratingMap.get(company.getCompanyId()))
+                .totalReviews(enrichment.reviewCountMap.getOrDefault(company.getCompanyId(), 0L))
                 .build();
     }
 
     private String generateAbbreviation(String companyName) {
-        // Simple abbreviation: take uppercase initials
         String[] words = companyName.split("\\s+");
-        StringBuilder sb = new StringBuilder();
+        StringBuilder abbreviationBuilder = new StringBuilder();
         for (String word : words) {
             if (!word.isEmpty()) {
-                sb.append(Character.toUpperCase(word.charAt(0)));
+                abbreviationBuilder.append(Character.toUpperCase(word.charAt(0)));
             }
         }
-        return sb.toString();
+        return abbreviationBuilder.toString();
+    }
+
+    @Override
+    public Boolean isCompanyRequestOwner(Long requestId, Long userId) {
+        if (requestId == null || userId == null) return false;
+        return companyRequestRepository.findById(requestId)
+                .map(req -> req.getCreatedBy().equals(userId))
+                .orElse(false);
     }
 }

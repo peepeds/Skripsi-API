@@ -1,11 +1,11 @@
 package com.example.skripsi.services;
 
-import com.example.skripsi.entities.User;
 import com.example.skripsi.exceptions.BadRequestExceptions;
-import com.example.skripsi.repositories.UserRepository;
+import com.example.skripsi.interfaces.IUserService;
 import com.example.skripsi.securities.SecurityUtils;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -14,15 +14,15 @@ import java.util.stream.Stream;
 
 public abstract class AbstractMasterDataService<Entity, Response, CreateRequest, UpdateRequest> {
     protected final JpaRepository<Entity, Integer> repository;
-    protected final UserRepository userRepository;
+    protected final IUserService userService;
     protected final SecurityUtils securityUtils;
 
     public AbstractMasterDataService(
             JpaRepository<Entity, Integer> repository,
-            UserRepository userRepository,
+            IUserService userService,
             SecurityUtils securityUtils) {
         this.repository = repository;
-        this.userRepository = userRepository;
+        this.userService = userService;
         this.securityUtils = securityUtils;
     }
 
@@ -34,16 +34,12 @@ public abstract class AbstractMasterDataService<Entity, Response, CreateRequest,
         }
 
         List<Long> userIds = extractUserIds(entities);
-        Map<Long, User> userMap = new java.util.HashMap<>();
+        Map<Long, String> userNameMap = userIds.isEmpty()
+                ? new HashMap<>()
+                : userService.getUserNameMap(userIds);
 
-        if (!userIds.isEmpty()) {
-            Map<Long, User> fetchedUsers = userRepository.findByUserIdMap(userIds);
-            userMap.putAll(fetchedUsers);
-        }
-
-        final Map<Long, User> finalUserMap = userMap;
         return entities.stream()
-                .map(entity -> toResponse(entity, finalUserMap))
+                .map(entity -> toResponse(entity, userNameMap))
                 .collect(Collectors.toList());
     }
 
@@ -82,7 +78,7 @@ public abstract class AbstractMasterDataService<Entity, Response, CreateRequest,
         Entity entity = buildEntity(request, userId);
         Entity savedEntity = repository.save(entity);
 
-        return toResponse(savedEntity, new java.util.HashMap<>());
+        return toResponse(savedEntity, new HashMap<>());
     }
 
     public Response update(Integer id, UpdateRequest request) {
@@ -96,15 +92,14 @@ public abstract class AbstractMasterDataService<Entity, Response, CreateRequest,
 
         Entity savedEntity = repository.save(entity);
 
-        return toResponse(savedEntity, new java.util.HashMap<>());
+        return toResponse(savedEntity, new HashMap<>());
     }
 
-    protected String resolveUsername(Long userId, Map<Long, User> userMap) {
+    protected String resolveUsername(Long userId, Map<Long, String> userNameMap) {
         if (userId == null) {
             return null;
         }
-        User user = userMap.get(userId);
-        return user != null ? user.getFirstName() : null;
+        return userNameMap.get(userId);
     }
 
     protected abstract void validateBeforeCreate(CreateRequest request);
@@ -115,7 +110,7 @@ public abstract class AbstractMasterDataService<Entity, Response, CreateRequest,
 
     protected abstract Entity setUpdateAuditFields(Entity entity, Long userId);
 
-    protected abstract Response toResponse(Entity entity, Map<Long, User> userMap);
+    protected abstract Response toResponse(Entity entity, Map<Long, String> userNameMap);
 
     protected abstract String getNotFoundErrorMessage();
 }

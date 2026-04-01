@@ -2,6 +2,7 @@ package com.example.skripsi.controllers;
 
 import com.example.skripsi.models.*;
 import com.example.skripsi.models.user.*;
+import com.example.skripsi.models.constant.*;
 import com.example.skripsi.services.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -27,7 +28,7 @@ public class UserController {
 
         return WebResponse.builder()
                 .success(true)
-                .message("Successfully Get All User")
+                .message(MessageConstants.Success.SUCCESSFULLY_GET_ALL_USER)
                 .result(userResponses)
                 .build();
     }
@@ -40,7 +41,7 @@ public class UserController {
 
         return WebResponse.builder()
                 .success(true)
-                .message("Successfully get profile")
+                .message(MessageConstants.Success.SUCCESSFULLY_GET_PROFILE)
                 .result(userProfile)
                 .build();
     }
@@ -56,7 +57,7 @@ public class UserController {
             return ResponseEntity.badRequest().body(
                     WebResponse.builder()
                             .success(false)
-                            .message("Email is required")
+                            .message(MessageConstants.Success.EMAIL_IS_REQUIRED)
                             .build()
             );
         }
@@ -67,7 +68,7 @@ public class UserController {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(
                     WebResponse.builder()
                             .success(false)
-                            .message("Email already used!")
+                            .message(MessageConstants.Success.EMAIL_ALREADY_USED_CONFLICT)
                             .build()
             );
         }
@@ -75,7 +76,7 @@ public class UserController {
         return ResponseEntity.ok(
                 WebResponse.builder()
                         .success(true)
-                        .message("Email is available")
+                        .message(MessageConstants.Success.EMAIL_IS_AVAILABLE)
                         .build()
         );
     }
@@ -87,7 +88,7 @@ public class UserController {
 
         return WebResponse.builder()
                 .success(true)
-                .message("Certificate request submitted successfully")
+                .message(MessageConstants.Success.CERTIFICATE_REQUEST_SUBMITTED)
                 .result(response)
                 .build();
     }
@@ -99,7 +100,7 @@ public class UserController {
 
         return WebResponse.builder()
                 .success(true)
-                .message("Certificate request reviewed successfully")
+                .message(MessageConstants.Success.CERTIFICATE_REQUEST_REVIEWED)
                 .result(response)
                 .build();
     }
@@ -111,7 +112,7 @@ public class UserController {
 
         return WebResponse.builder()
                 .success(true)
-                .message("Certificate request detail")
+                .message(MessageConstants.Success.CERTIFICATE_REQUEST_DETAIL)
                 .result(result)
                 .build();
     }

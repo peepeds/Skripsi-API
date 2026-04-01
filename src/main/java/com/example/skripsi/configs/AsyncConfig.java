@@ -29,8 +29,6 @@ public class AsyncConfig {
     @Bean(name = "taskExecutor")
     @Primary
     public AsyncTaskExecutor securityAwareTaskExecutor(ThreadPoolTaskExecutor rawTaskExecutor) {
-        //SecurityContextHolder.setStrategyName(SecurityContextHolder.MODE_INHERITABLETHREADLOCAL);
-
         return new DelegatingSecurityContextAsyncTaskExecutor(rawTaskExecutor);
     }
 }
