@@ -14,6 +14,7 @@ public class PhoneNumberValidator implements ConstraintValidator<ValidPhoneNumbe
         if (phoneNumber == null || phoneNumber.trim().isEmpty()) {
             return true;
         }
+
         Pattern pattern = Pattern.compile(PHONE_PATTERN);
         Matcher matcher = pattern.matcher(phoneNumber);
 

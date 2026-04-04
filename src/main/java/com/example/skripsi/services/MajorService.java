@@ -52,6 +52,7 @@ public class MajorService extends AbstractMasterDataService<Major, MajorResponse
     @Override
     protected void validateBeforeCreate(CreateMajorRequest request) {
         boolean isExists = majorRepository.existsByMajorNameIgnoreCase(request.getMajorName().trim());
+
         if (isExists) {
             throw new BadRequestExceptions("Major Name already exists!");
         }

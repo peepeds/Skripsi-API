@@ -109,6 +109,7 @@ public class AuthController {
 
     private String extractRefreshTokenFromCookie(HttpServletRequest request) {
         Cookie[] cookies = request.getCookies();
+
         if (cookies == null) return null;
 
         return Arrays.stream(cookies)

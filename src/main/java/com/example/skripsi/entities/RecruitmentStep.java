@@ -19,8 +19,8 @@ public class RecruitmentStep {
     @Column(name = "internship_header_id", nullable = false)
     private Long internshipHeaderId;
 
-    @Column(name = "step_name", nullable = false, length = 100)
-    private String stepName;
+    @Column(name = "step_code", nullable = false)
+    private Integer stepCode;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "internship_header_id", insertable = false, updatable = false)

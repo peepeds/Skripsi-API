@@ -56,6 +56,7 @@ public class JwtFilter extends OncePerRequestFilter {
             Claims claims = jwtUtils.parseClaims(token);
 
             Date expiration = claims.getExpiration();
+
             if (expiration != null && expiration.before(new Date())) {
                 throw new InvalidTokenException("Token expired");
             }

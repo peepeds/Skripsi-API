@@ -33,13 +33,16 @@ public class AuditService implements IAuditService {
         if (entity == null || id == null) {
             throw new BadRequestExceptions(MessageConstants.Validation.ENTITY_AND_ID_REQUIRED);
         }
+
         String entityUpper = entity.toUpperCase();
+
         if (!VALID_ENTITIES.contains(entityUpper)) {
             throw new BadRequestExceptions(MessageConstants.Validation.UNKNOWN_ENTITY_TYPE + entity);
         }
 
         if (EntityTypeConstants.COMPANY_REQUEST.equals(entityUpper)) {
             Boolean isOwner = companyService.isCompanyRequestOwner(id, currentUserId);
+
             if (!isOwner) {
                 throw new CustomAccessDeniedException(MessageConstants.NotFound.ACCESS_DENIED_OWN_AUDIT_LOGS);
             }
@@ -47,6 +50,7 @@ public class AuditService implements IAuditService {
 
         if (EntityTypeConstants.UPLOAD_CERTIFICATES.equals(entityUpper)) {
             Boolean isOwner = userService.isCertificateRequestOwner(id, currentUserId);
+
             if (!isOwner) {
                 throw new CustomAccessDeniedException(MessageConstants.NotFound.ACCESS_DENIED_OWN_AUDIT_LOGS);
             }

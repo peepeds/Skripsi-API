@@ -4,7 +4,6 @@ import com.example.skripsi.interfaces.IReviewService;
 import com.example.skripsi.models.WebResponse;
 import com.example.skripsi.models.review.CreateReviewRequest;
 import jakarta.validation.Valid;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -38,7 +37,6 @@ public class ReviewController {
     }
 
     @PostMapping("/{slug}")
-    @PreAuthorize("isAuthenticated()")
     public WebResponse<?> submitReview(@PathVariable String slug, @Valid @RequestBody CreateReviewRequest request) {
         var result = reviewService.submitReview(slug, request);
         return WebResponse.builder()
@@ -68,6 +66,31 @@ public class ReviewController {
         return WebResponse.builder()
                 .success(true)
                 .message("Successfully retrieved company reviews")
+                .result(result.getResult())
+                .meta(result.getMeta())
+                .build();
+    }
+
+    @GetMapping("/{slug}/process")
+    public WebResponse<?> getRecruitmentProcesses(
+            @PathVariable String slug,
+            @RequestParam(value = "cursor", required = false) Long cursor,
+            @RequestParam(value = "limit", defaultValue = "10") int limit) {
+        var result = reviewService.getRecruitmentProcesses(slug, cursor, limit);
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully retrieved recruitment process")
+                .result(result.getResult())
+                .meta(result.getMeta())
+                .build();
+    }
+
+    @GetMapping("/{slug}/process/summary")
+    public WebResponse<?> getRecruitmentProcessSummary(@PathVariable String slug) {
+        var result = reviewService.getRecruitmentProcessSummary(slug);
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully retrieved recruitment process summary")
                 .result(result)
                 .build();
     }

@@ -14,4 +14,6 @@ public interface RecruitmentStepRepository extends JpaRepository<RecruitmentStep
 
     @Query("SELECT rs FROM RecruitmentStep rs WHERE rs.internshipHeaderId IN (SELECT ih.internshipHeaderId FROM InternshipHeader ih WHERE ih.companyId = :companyId)")
     List<RecruitmentStep> findAllStepsByCompanyId(@Param("companyId") Long companyId);
+
+    List<RecruitmentStep> findByInternshipHeaderIdIn(List<Long> headerIds);
 }

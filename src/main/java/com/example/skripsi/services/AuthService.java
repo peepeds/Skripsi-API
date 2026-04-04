@@ -46,8 +46,10 @@ public class AuthService implements IAuthService {
     @Override
     public void register(Register register) {
         String email = register.getEmail().toLowerCase();
+        log.info("[register] attempt email={}", email);
 
         if (userRepository.findByEmail(email).isPresent()) {
+            log.warn("[register] email already in use email={}", email);
             throw new BadRequestExceptions(MessageConstants.Auth.EMAIL_ALREADY_USED);
         }
 
@@ -56,6 +58,7 @@ public class AuthService implements IAuthService {
         Major major = majorService.findMajorById(Long.valueOf(register.getMajorId()));
 
         if (!major.getRegion().getRegionId().equals(region.getRegionId())) {
+            log.warn("[register] major regionId={} does not match regionId={}", major.getRegion().getRegionId(), region.getRegionId());
             throw new BadRequestExceptions(MessageConstants.Validation.MAJOR_DOES_NOT_BELONG_TO_REGION);
         }
 
@@ -83,6 +86,7 @@ public class AuthService implements IAuthService {
         } else if (registerId.length() == 5 && registerId.startsWith("D")) {
             lectureId = registerId;
         } else {
+            log.warn("[register] invalid registerId format registerId={}", registerId);
             throw new BadRequestExceptions(MessageConstants.Auth.INVALID_STUDENT_ID_OR_LECTURE_ID);
         }
 
@@ -97,16 +101,22 @@ public class AuthService implements IAuthService {
                 .build();
 
         userProfileRepository.save(profile);
+        log.info("[register] success userId={} email={}", user.getUserId(), email);
     }
 
     @Override
     public AuthResponse login(Login login) {
-        User user = userRepository.findByEmail(login.getEmail().toLowerCase())
-                .orElseThrow(() ->
-                        new InvalidCredentialsException(MessageConstants.Auth.INVALID_EMAIL_OR_PASSWORD)
-                );
+        String email = login.getEmail().toLowerCase();
+        log.info("[login] attempt email={}", email);
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> {
+                    log.warn("[login] user not found email={}", email);
+                    return new InvalidCredentialsException(MessageConstants.Auth.INVALID_EMAIL_OR_PASSWORD);
+                });
 
         if (!BCrypt.checkpw(login.getPassword(), user.getPassword())) {
+            log.warn("[login] invalid password userId={}", user.getUserId());
             throw new InvalidCredentialsException(MessageConstants.Auth.INVALID_EMAIL_OR_PASSWORD);
         }
 
@@ -131,6 +141,7 @@ public class AuthService implements IAuthService {
                 .build();
 
         userTokenRepository.save(token);
+        log.info("[login] success userId={} email={}", user.getUserId(), email);
 
         return toAuthResponse(accessToken, refreshToken);
     }
@@ -145,12 +156,14 @@ public class AuthService implements IAuthService {
     @Override
     public AuthResponse refresh(String refreshToken) {
         String jti = jwtUtils.getJti(refreshToken);
+        log.info("[refresh] attempt jti={}", jti);
 
         UserToken tokenRecord = userTokenRepository
                 .findValidRefreshToken(jti, OffsetDateTime.now())
-                .orElseThrow(() ->
-                        new InvalidTokenException("Invalid or expired refresh token")
-                );
+                .orElseThrow(() -> {
+                    log.warn("[refresh] token not found or expired jti={}", jti);
+                    return new InvalidTokenException("Invalid or expired refresh token");
+                });
 
         User user = tokenRecord.getUser();
 
@@ -160,6 +173,7 @@ public class AuthService implements IAuthService {
                 .toList();
 
         String newAccessToken = jwtUtils.generateAccessToken(user.getEmail(), roles);
+        log.info("[refresh] success userId={}", user.getUserId());
 
         return toAuthResponse(newAccessToken, null);
     }
@@ -167,14 +181,17 @@ public class AuthService implements IAuthService {
     @Override
     public void logout(String refreshToken) {
         String jti = jwtUtils.getJti(refreshToken);
+        log.info("[logout] attempt jti={}", jti);
 
         UserToken tokenRecord = userTokenRepository
                 .findValidRefreshToken(jti, OffsetDateTime.now())
-                .orElseThrow(() ->
-                        new InvalidTokenException("Invalid or expired refresh token")
-                );
+                .orElseThrow(() -> {
+                    log.warn("[logout] token not found or expired jti={}", jti);
+                    return new InvalidTokenException("Invalid or expired refresh token");
+                });
 
         tokenRecord.setRevoked(true);
         userTokenRepository.save(tokenRecord);
+        log.info("[logout] success userId={}", tokenRecord.getUser().getUserId());
     }
 }

@@ -14,6 +14,10 @@ import com.example.skripsi.repositories.*;
 import com.example.skripsi.repositories.projections.RecentReviewProjection;
 import com.example.skripsi.securities.SecurityUtils;
 import jakarta.transaction.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -27,8 +31,17 @@ import java.util.stream.Collectors;
 @Transactional
 public class ReviewService implements IReviewService {
 
+    private static final Logger log = LoggerFactory.getLogger(ReviewService.class);
+
     private static final String DURATION_UNIT = " months";
     private static final String DURATION_RANGE_SEPARATOR = " - ";
+    private static final String LOOKUP_TYPE_INTERNSHIP_REVIEW = "INTERNSHIP_REVIEW";
+    private static final String LOOKUP_CODE_RECRUITMENT_STEPS = "RECRUITMENT_STEPS";
+    private static final String LOOKUP_CODE_INTERNSHIP_TYPE = "INTERNSHIP_TYPE";
+    private static final String LOOKUP_CODE_SCHEME = "SCHEME";
+    private static final String LOOKUP_CODE_ADMISSION_TRACK = "ADMISSION_TRACK";
+    private static final String LOOKUP_CODE_RECRUITMENT_DURATION = "RECRUITMENT_DURATION";
+    private static final int MAX_SUB_CATEGORIES = 3;
 
     private final InternshipHeaderRepository internshipHeaderRepository;
     private final InternshipDetailRepository internshipDetailRepository;
@@ -38,6 +51,8 @@ public class ReviewService implements IReviewService {
     private final SecurityUtils securityUtils;
     private final ICategoryService categoryService;
     private final AuditService auditService;
+    private final LookupRepository lookupRepository;
+    private final IUserService userService;
 
     public ReviewService(InternshipHeaderRepository internshipHeaderRepository,
                          InternshipDetailRepository internshipDetailRepository,
@@ -46,7 +61,9 @@ public class ReviewService implements IReviewService {
                          ICategoryService categoryService,
                          ICompanyService companyService,
                          SecurityUtils securityUtils,
-                         AuditService auditService) {
+                         AuditService auditService,
+                         LookupRepository lookupRepository,
+                         IUserService userService) {
         this.internshipHeaderRepository = internshipHeaderRepository;
         this.internshipDetailRepository = internshipDetailRepository;
         this.recruitmentStepRepository = recruitmentStepRepository;
@@ -55,6 +72,8 @@ public class ReviewService implements IReviewService {
         this.companyService = companyService;
         this.securityUtils = securityUtils;
         this.auditService = auditService;
+        this.lookupRepository = lookupRepository;
+        this.userService = userService;
     }
 
     @Override
@@ -65,9 +84,7 @@ public class ReviewService implements IReviewService {
         
         List<String> jobTitles = internshipHeaderRepository.searchJobTitles(query.trim());
         return jobTitles.stream()
-                .map(jobTitle -> JobListItemResponse.builder()
-                        .jobTitle(jobTitle)
-                        .build())
+                .map(this::toJobListItemResponse)
                 .collect(Collectors.toList());
     }
 
@@ -77,7 +94,19 @@ public class ReviewService implements IReviewService {
 
         validateAdditionalSubCategories(request.getSubCategoryIds());
 
-        InternshipHeader internshipHeader = InternshipHeader.builder()
+        InternshipHeader savedHeader = internshipHeaderRepository.save(buildInternshipHeader(companyId, userId, request, now));
+        InternshipDetail savedDetail = internshipDetailRepository.save(buildInternshipDetail(savedHeader.getInternshipHeaderId(), userId, request, now));
+
+        saveRecruitmentSteps(savedHeader.getInternshipHeaderId(), request.getRecruitmentSteps());
+        saveJobSubCategories(savedHeader.getInternshipHeaderId(), userId, request.getSubCategoryIds(), now);
+
+        auditService.record(EntityTypeConstants.INTERNSHIP_REVIEW, savedHeader.getInternshipHeaderId(), ActionConstants.SUBMITTED, userId);
+
+        return toSubmitResponse(savedHeader, savedDetail, now);
+    }
+
+    private InternshipHeader buildInternshipHeader(Long companyId, Long userId, CreateReviewRequest request, OffsetDateTime now) {
+        return InternshipHeader.builder()
                 .userId(userId)
                 .companyId(companyId)
                 .jobTitle(request.getJobTitle())
@@ -86,11 +115,11 @@ public class ReviewService implements IReviewService {
                 .createdAt(now)
                 .createdBy(userId)
                 .build();
+    }
 
-        InternshipHeader savedHeader = internshipHeaderRepository.save(internshipHeader);
-
-        InternshipDetail internshipDetail = InternshipDetail.builder()
-                .internshipHeaderId(savedHeader.getInternshipHeaderId())
+    private InternshipDetail buildInternshipDetail(Long headerId, Long userId, CreateReviewRequest request, OffsetDateTime now) {
+        return InternshipDetail.builder()
+                .internshipHeaderId(headerId)
                 .type(request.getInternshipType())
                 .scheme(request.getWorkScheme())
                 .workCultureRating(request.getRatings().getWorkCulture())
@@ -102,52 +131,51 @@ public class ReviewService implements IReviewService {
                 .testimony(request.getTestimony())
                 .pros(request.getPros())
                 .cons(request.getCons())
+                .admissionTrack(request.getAdmissionTrack())
+                .recruitmentDurationCode(request.getRecruitmentDurationCode())
+                .exampleQuestions(request.getExampleQuestions())
+                .selectionProcess(request.getSelectionProcess())
+                .tipsTricks(request.getTipsTricks())
                 .createdAt(now)
                 .createdBy(userId)
                 .build();
+    }
 
-        InternshipDetail savedDetail = internshipDetailRepository.save(internshipDetail);
-
-        if (request.getRecruitmentProcess() != null && !request.getRecruitmentProcess().isEmpty()) {
-            List<RecruitmentStep> recruitmentSteps = new ArrayList<>();
-            for (String stepName : request.getRecruitmentProcess()) {
-                RecruitmentStep recruitmentStep = RecruitmentStep.builder()
-                        .internshipHeaderId(savedHeader.getInternshipHeaderId())
-                        .stepName(stepName)
-                        .build();
-                recruitmentSteps.add(recruitmentStep);
-            }
-            recruitmentStepRepository.saveAll(recruitmentSteps);
+    private void saveRecruitmentSteps(Long headerId, List<Long> stepCodes) {
+        if (stepCodes == null || stepCodes.isEmpty()) {
+            return;
         }
 
-        if (request.getSubCategoryIds() != null && !request.getSubCategoryIds().isEmpty()) {
-            List<InternshipJobSubCategory> jobSubCategories = new ArrayList<>();
-            for (Long subCategoryId : request.getSubCategoryIds()) {
-                InternshipJobSubCategory jobSubCategory = InternshipJobSubCategory.builder()
-                        .internshipHeaderId(savedHeader.getInternshipHeaderId())
+        List<RecruitmentStep> steps = stepCodes.stream()
+                .map(stepCode -> RecruitmentStep.builder()
+                        .internshipHeaderId(headerId)
+                        .stepCode(stepCode.intValue())
+                        .build())
+                .collect(Collectors.toList());
+        recruitmentStepRepository.saveAll(steps);
+    }
+
+    private void saveJobSubCategories(Long headerId, Long userId, List<Long> subCategoryIds, OffsetDateTime now) {
+        if (subCategoryIds == null || subCategoryIds.isEmpty()) {
+            return;
+        }
+
+        List<InternshipJobSubCategory> subCategories = subCategoryIds.stream()
+                .map(subCategoryId -> InternshipJobSubCategory.builder()
+                        .internshipHeaderId(headerId)
                         .subCategoryId(subCategoryId)
                         .createdAt(now)
                         .createdBy(userId)
-                        .build();
-                jobSubCategories.add(jobSubCategory);
-            }
-            internshipJobSubCategoryRepository.saveAll(jobSubCategories);
-        }
-
-        auditService.record(EntityTypeConstants.INTERNSHIP_REVIEW, savedHeader.getInternshipHeaderId(), ActionConstants.SUBMITTED, userId);
-
-        return ReviewResponse.builder()
-                .internshipHeaderId(savedHeader.getInternshipHeaderId())
-                .internshipDetailId(savedDetail.getInternshipDetailId())
-                .createdAt(now)
-                .message(MessageConstants.Success.REVIEW_SUBMITTED_SUCCESSFULLY)
-                .build();
+                        .build())
+                .collect(Collectors.toList());
+        internshipJobSubCategoryRepository.saveAll(subCategories);
     }
 
     @Override
     public ReviewResponse submitReview(String slug, CreateReviewRequest request) {
         Long companyId = companyService.getCompanyIdBySlug(slug);
         Long userId = securityUtils.getCurrentUserId();
+        
         return submitReview(companyId, request, userId);
     }
 
@@ -155,6 +183,7 @@ public class ReviewService implements IReviewService {
         Long companyId = companyService.getCompanyIdBySlug(slug);
 
         List<InternshipHeader> headers = internshipHeaderRepository.findByCompanyId(companyId);
+
         if (headers.isEmpty()) {
             return ReviewSummaryResponse.builder()
                     .informationDetails(ReviewSummaryResponse.InformationDetails.builder().build())
@@ -172,20 +201,12 @@ public class ReviewService implements IReviewService {
         ReviewSummaryResponse.Ratings ratings = aggregateRatings(details);
         ReviewSummaryResponse.RecruitmentProcesses recruitmentProcesses = aggregateRecruitmentProcesses(companyId);
 
-        return ReviewSummaryResponse.builder()
-                .informationDetails(ReviewSummaryResponse.InformationDetails.builder()
-                        .type(type)
-                        .workScheme(workSchemes)
-                        .duration(duration)
-                        .subCategories(subCategories)
-                        .build())
-                .ratings(ratings)
-                .recruitmentProcesses(recruitmentProcesses)
-                .build();
+        return toSummaryResponse(type, duration, workSchemes, subCategories, ratings, recruitmentProcesses);
     }
 
     private String getMostFrequentType(List<InternshipDetail> details) {
         return details.stream()
+                .filter(d -> d.getType() != null)
                 .collect(Collectors.groupingBy(InternshipDetail::getType, Collectors.counting()))
                 .entrySet().stream()
                 .max(Map.Entry.comparingByValue())
@@ -221,11 +242,11 @@ public class ReviewService implements IReviewService {
 
     private List<String> getWorkSchemesSortedByFrequency(List<InternshipDetail> details) {
         return details.stream()
+                .filter(d -> d.getScheme() != null)
                 .collect(Collectors.groupingBy(InternshipDetail::getScheme, Collectors.counting()))
                 .entrySet().stream()
                 .sorted((a, b) -> b.getValue().compareTo(a.getValue()))
                 .map(Map.Entry::getKey)
-                .filter(Objects::nonNull)
                 .collect(Collectors.toList());
     }
 
@@ -244,10 +265,10 @@ public class ReviewService implements IReviewService {
             return List.of();
         }
 
-        Map<Long, String> subcatNameMap = categoryService.getSubCategoryNameMap(subCategoryIds);
+        Map<Long, String> subCategoryNameMap = categoryService.getSubCategoryNameMap(subCategoryIds);
 
         return subCategoryIds.stream()
-                .map(subcatNameMap::get)
+                .map(subCategoryNameMap::get)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
     }
@@ -297,22 +318,52 @@ public class ReviewService implements IReviewService {
 
         Double ratingAvg = ratingOptional.isPresent() ? ratingOptional.getAsDouble() : null;
 
-        List<String> stepNames = steps.stream()
-                .map(RecruitmentStep::getStepName)
+        Map<String, String> stepLookup = loadInternshipReviewLookups()
+                .getOrDefault(LOOKUP_CODE_RECRUITMENT_STEPS, Map.of());
+
+        List<String> stepDescriptions = steps.stream()
+                .map(RecruitmentStep::getStepCode)
                 .distinct()
+                .map(code -> stepLookup.get(String.valueOf(code)))
+                .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
         return ReviewSummaryResponse.RecruitmentProcesses.builder()
                 .rating(ratingAvg)
-                .steps(stepNames)
+                .steps(stepDescriptions)
                 .build();
     }
 
+    private Map<String, Map<String, String>> loadInternshipReviewLookups() {
+        List<Lookup> lookups = lookupRepository.findByLookupType(LOOKUP_TYPE_INTERNSHIP_REVIEW);
+        
+        log.info("[loadInternshipReviewLookups] raw lookup count={}", lookups.size());
+        lookups.forEach(l -> log.debug("[loadInternshipReviewLookups] code={}, value={}, desc={}",
+                l.getLookupCode(), l.getLookupValue(), l.getLookupDescription()));
+
+        return lookups.stream()
+                .filter(lookup -> lookup.getLookupDescription() != null)
+                .collect(Collectors.groupingBy(
+                        Lookup::getLookupCode,
+                        Collectors.toMap(Lookup::getLookupValue, Lookup::getLookupDescription)
+                ));
+    }
+
+
     @Override
     public CursorPageResponse<CompanyReviewsResponse.ReviewItem> getCompanyReviews(String slug, String order, Long cursor, int limit) {
+        log.info("[getCompanyReviews] slug={}, order={}, cursor={}, limit={}", slug, order, cursor, limit);
         Long companyId = companyService.getCompanyIdBySlug(slug);
-        List<InternshipHeader> headers = internshipHeaderRepository.findByCompanyId(companyId);
+        log.info("[getCompanyReviews] resolved companyId={}", companyId);
+
+        Pageable pageable = PageRequest.of(0, limit + 1);
+        boolean isLatest = !"oldest".equalsIgnoreCase(order);
         
+        List<InternshipHeader> headers = isLatest
+                ? internshipHeaderRepository.findPageByCompanyIdDesc(companyId, cursor, pageable)
+                : internshipHeaderRepository.findPageByCompanyIdAsc(companyId, cursor, pageable);
+        log.info("[getCompanyReviews] fetched {} headers from DB", headers.size());
+
         if (headers.isEmpty()) {
             return CursorPageResponse.<CompanyReviewsResponse.ReviewItem>builder()
                     .result(List.of())
@@ -325,101 +376,244 @@ public class ReviewService implements IReviewService {
                     .build();
         }
 
-        List<InternshipDetail> details = internshipDetailRepository.findAllDetailsByCompanyId(companyId);
+        boolean hasMore = headers.size() > limit;
+        List<InternshipHeader> pageHeaders = hasMore ? headers.subList(0, limit) : headers;
+
+        ReviewDataBundle data = loadReviewData(pageHeaders);
+        log.info("[getCompanyReviews] data bundle ready, building review items");
+
+        List<CompanyReviewsResponse.ReviewItem> items = pageHeaders.stream()
+                .map(header -> toReviewItem(header, data))
+                .collect(Collectors.toList());
+
+        Long nextCursor = hasMore
+                ? pageHeaders.get(pageHeaders.size() - 1).getInternshipHeaderId()
+                : null;
+
+        log.info("[getCompanyReviews] returning {} items, hasMore={}", items.size(), hasMore);
+        
+        return CursorPageResponse.<CompanyReviewsResponse.ReviewItem>builder()
+                .result(items)
+                .meta(CursorPageResponse.Meta.builder()
+                        .nextCursor(nextCursor)
+                        .previousCursor(cursor)
+                        .size(items.size())
+                        .hasMore(hasMore)
+                        .build())
+                .build();
+    }
+
+    @Override
+    public CursorPageResponse<RecruitmentProcessResponse.ProcessItem> getRecruitmentProcesses(String slug, Long cursor, int limit) {
+        log.info("[getRecruitmentProcesses] slug={}, cursor={}, limit={}", slug, cursor, limit);
+        Long companyId = companyService.getCompanyIdBySlug(slug);
+        log.info("[getRecruitmentProcesses] resolved companyId={}", companyId);
+
+        Pageable pageable = PageRequest.of(0, limit + 1);
+        
+        List<InternshipHeader> headers = internshipHeaderRepository.findPageByCompanyIdDesc(companyId, cursor, pageable);
+        log.info("[getRecruitmentProcesses] fetched {} headers from DB", headers.size());
+
+        if (headers.isEmpty()) {
+            return CursorPageResponse.<RecruitmentProcessResponse.ProcessItem>builder()
+                    .result(List.of())
+                    .meta(CursorPageResponse.Meta.builder()
+                            .nextCursor(null)
+                            .previousCursor(null)
+                            .size(0)
+                            .hasMore(false)
+                            .build())
+                    .build();
+        }
+
+        boolean hasMore = headers.size() > limit;
+        List<InternshipHeader> pageHeaders = hasMore ? headers.subList(0, limit) : headers;
+
+        ReviewDataBundle data = loadReviewData(pageHeaders);
+        log.info("[getRecruitmentProcesses] data bundle ready, building process items");
+
+        List<RecruitmentProcessResponse.ProcessItem> items = pageHeaders.stream()
+                .map(header -> toProcessItem(header, data))
+                .collect(Collectors.toList());
+
+        Long nextCursor = hasMore
+                ? pageHeaders.get(pageHeaders.size() - 1).getInternshipHeaderId()
+                : null;
+
+        log.info("[getRecruitmentProcesses] returning {} items, hasMore={}", items.size(), hasMore);
+        
+        return CursorPageResponse.<RecruitmentProcessResponse.ProcessItem>builder()
+                .result(items)
+                .meta(CursorPageResponse.Meta.builder()
+                        .nextCursor(nextCursor)
+                        .previousCursor(cursor)
+                        .size(items.size())
+                        .hasMore(hasMore)
+                        .build())
+                .build();
+    }
+
+    @Override
+    public RecruitmentProcessSummaryResponse getRecruitmentProcessSummary(String slug) {
+        log.info("[getRecruitmentProcessSummary] slug={}", slug);
+        Long companyId = companyService.getCompanyIdBySlug(slug);
+        
+        List<InternshipHeader> headers = internshipHeaderRepository.findByCompanyId(companyId);
+        log.info("[getRecruitmentProcessSummary] found {} headers for companyId={}", headers.size(), companyId);
+        
+        if (headers.isEmpty()) {
+            return RecruitmentProcessSummaryResponse.builder()
+                    .difficulty(RecruitmentProcessSummaryResponse.Difficulty.builder()
+                            .rating(0.0)
+                            .count(0L)
+                            .build())
+                    .statistics(RecruitmentProcessSummaryResponse.Statistics.builder()
+                            .admissionTrack(Map.of())
+                            .recruitmentDuration("")
+                            .frequentSelectionProcess(Map.of())
+                            .build())
+                    .build();
+        }
+        
+        List<Long> headerIds = headers.stream()
+                .map(InternshipHeader::getInternshipHeaderId)
+                .collect(Collectors.toList());
+        
+        List<InternshipDetail> details = internshipDetailRepository.findByInternshipHeaderIds(headerIds);
+        Map<String, Map<String, String>> lookupDescMap = loadInternshipReviewLookups();
+        
+        log.info("[getRecruitmentProcessSummary] found {} details from {} headers", details.size(), headers.size());
+        
+        Double avgDifficulty = details.stream()
+                .mapToInt(d -> d.getInterviewDifficultyRating() != null ? d.getInterviewDifficultyRating() : 0)
+                .filter(rating -> rating > 0)
+                .average()
+                .orElse(0.0);
+        
+        long totalRecords = details.size();
+        
+        Map<String, Long> admissionTrackCount = new HashMap<>();
+        for (InternshipDetail detail : details) {
+            if (detail.getAdmissionTrack() != null) {
+                String trackValue = lookupDescMap.getOrDefault(LOOKUP_CODE_ADMISSION_TRACK, Map.of())
+                        .get(detail.getAdmissionTrack());
+                if (trackValue != null) {
+                    admissionTrackCount.put(trackValue, admissionTrackCount.getOrDefault(trackValue, 0L) + 1);
+                }
+            }
+        }
+        
+        Map<String, Long> recruitmentDurationCount = new HashMap<>();
+        for (InternshipDetail detail : details) {
+            if (detail.getRecruitmentDurationCode() != null) {
+                String durationValue = lookupDescMap.getOrDefault(LOOKUP_CODE_RECRUITMENT_DURATION, Map.of())
+                        .get(detail.getRecruitmentDurationCode());
+                if (durationValue != null) {
+                    recruitmentDurationCount.put(durationValue, recruitmentDurationCount.getOrDefault(durationValue, 0L) + 1);
+                }
+            }
+        }
+        
+        List<RecruitmentStep> allSteps = recruitmentStepRepository.findByInternshipHeaderIdIn(headerIds);
+        Map<String, Long> stepCount = new HashMap<>();
+        for (RecruitmentStep step : allSteps) {
+            String stepValue = lookupDescMap.getOrDefault(LOOKUP_CODE_RECRUITMENT_STEPS, Map.of())
+                    .get(String.valueOf(step.getStepCode()));
+            if (stepValue != null) {
+                stepCount.put(stepValue, stepCount.getOrDefault(stepValue, 0L) + 1);
+            }
+        }
+        
+        Map<String, String> admissionTrackPercentages = admissionTrackCount.entrySet().stream()
+                .sorted((a, b) -> b.getValue().compareTo(a.getValue()))
+                .limit(5)
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        e -> String.format("%.0f%%", (e.getValue() * 100.0) / totalRecords),
+                        (a, b) -> a,
+                        LinkedHashMap::new
+                ));
+        
+        String mostFrequentDuration = recruitmentDurationCount.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse("");
+        
+        Map<String, String> frequentStepsPercentages = stepCount.entrySet().stream()
+                .sorted((a, b) -> b.getValue().compareTo(a.getValue()))
+                .limit(5)
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        e -> String.format("%.0f%%", (e.getValue() * 100.0) / totalRecords),
+                        (a, b) -> a,
+                        LinkedHashMap::new
+                ));
+        
+        log.info("[getRecruitmentProcessSummary] calculated avgDifficulty={}, admissionTracks={}, durationSteps={}", 
+                avgDifficulty, admissionTrackPercentages.size(), frequentStepsPercentages.size());
+        
+        return RecruitmentProcessSummaryResponse.builder()
+                .difficulty(RecruitmentProcessSummaryResponse.Difficulty.builder()
+                        .rating(Math.round(avgDifficulty * 10.0) / 10.0)
+                        .count((long) details.size())
+                        .build())
+                .statistics(RecruitmentProcessSummaryResponse.Statistics.builder()
+                        .admissionTrack(admissionTrackPercentages)
+                        .recruitmentDuration(mostFrequentDuration)
+                        .frequentSelectionProcess(frequentStepsPercentages)
+                        .build())
+                .build();
+    }
+
+    private ReviewDataBundle loadReviewData(List<InternshipHeader> headers) {
+        log.info("[loadReviewData] loading data for headerCount={}", headers.size());
+        List<Long> headerIds = headers.stream()
+                .map(InternshipHeader::getInternshipHeaderId)
+                .collect(Collectors.toList());
+
+        List<InternshipDetail> details = internshipDetailRepository.findByInternshipHeaderIds(headerIds);
+        
+        log.info("[loadReviewData] found {} details", details.size());
         Map<Long, InternshipDetail> detailMap = details.stream()
                 .collect(Collectors.toMap(InternshipDetail::getInternshipHeaderId, detail -> detail));
 
-        List<InternshipJobSubCategory> jobSubCategories = internshipJobSubCategoryRepository.findAllSubCategoriesByCompanyId(companyId);
-
+        List<InternshipJobSubCategory> jobSubCategories = internshipJobSubCategoryRepository.findByInternshipHeaderIdIn(headerIds);
         List<Long> allSubCategoryIds = jobSubCategories.stream()
                 .map(InternshipJobSubCategory::getSubCategoryId)
                 .distinct()
                 .collect(Collectors.toList());
 
-        Map<Long, String> subcategoryNameMap = categoryService.getSubCategoryNameMap(allSubCategoryIds);
-
+        Map<Long, String> subCategoryNameMap = categoryService.getSubCategoryNameMap(allSubCategoryIds);
         Map<Long, List<String>> subCategoriesMap = jobSubCategories.stream()
                 .collect(Collectors.groupingBy(
                         InternshipJobSubCategory::getInternshipHeaderId,
                         Collectors.collectingAndThen(
                                 Collectors.toList(),
                                 list -> list.stream()
-                                        .map(jobSubCategory -> subcategoryNameMap.get(jobSubCategory.getSubCategoryId()))
+                                        .map(jsc -> subCategoryNameMap.get(jsc.getSubCategoryId()))
                                         .filter(Objects::nonNull)
                                         .collect(Collectors.toList())
                         )
                 ));
 
-        List<RecruitmentStep> allSteps = recruitmentStepRepository.findAllStepsByCompanyId(companyId);
-        Map<Long, List<String>> stepsMap = allSteps.stream()
+        List<RecruitmentStep> allSteps = recruitmentStepRepository.findByInternshipHeaderIdIn(headerIds);
+        Map<Long, List<Integer>> stepsMap = allSteps.stream()
                 .collect(Collectors.groupingBy(
                         RecruitmentStep::getInternshipHeaderId,
-                        Collectors.mapping(RecruitmentStep::getStepName, Collectors.toList())
+                        Collectors.mapping(RecruitmentStep::getStepCode, Collectors.toList())
                 ));
 
-        List<CompanyReviewsResponse.ReviewItem> items = headers.stream()
-                .filter(header -> cursor == null || header.getInternshipHeaderId() > cursor)
-                .map(header -> {
-                    InternshipDetail detail = detailMap.get(header.getInternshipHeaderId());
-                    
-                    CompanyReviewsResponse.Ratings ratings = detail != null 
-                        ? CompanyReviewsResponse.Ratings.builder()
-                                .workCulture(detail.getWorkCultureRating())
-                                .learningOpp(detail.getLearningOpportunityRating())
-                                .mentorship(detail.getMentorshipRating())
-                                .benefit(detail.getBenefitsRating())
-                                .workLifeBalance(detail.getWorkLifeBalanceRating())
-                                .build()
-                        : null;
+        log.info("[loadReviewData] loading lookups");
+        Map<String, Map<String, String>> lookupDescMap = loadInternshipReviewLookups();
+        log.info("[loadReviewData] lookup codes loaded: {}", lookupDescMap.keySet());
 
-                    Integer year = header.getStartYear() != null ? header.getStartYear().getYear() : null;
-
-                    return CompanyReviewsResponse.ReviewItem.builder()
-                            .internshipHeaderId(header.getInternshipHeaderId())
-                            .internshipDetailId(detail != null ? detail.getInternshipDetailId() : null)
-                            .jobTitle(header.getJobTitle())
-                            .type(detail != null ? detail.getType() : null)
-                            .workScheme(detail != null ? detail.getScheme() : null)
-                            .durationMonths(header.getDurationMonths())
-                            .year(year)
-                            .subCategories(subCategoriesMap.getOrDefault(header.getInternshipHeaderId(), List.of()))
-                            .ratings(ratings)
-                            .recruitmentSteps(stepsMap.getOrDefault(header.getInternshipHeaderId(), List.of()))
-                            .interviewDifficulty(detail != null ? detail.getInterviewDifficultyRating() : null)
-                            .testimony(detail != null ? detail.getTestimony() : null)
-                            .pros(detail != null ? detail.getPros() : null)
-                            .cons(detail != null ? detail.getCons() : null)
-                            .createdAt(detail != null ? detail.getCreatedAt() : null)
-                            .build();
-                })
-                .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
+        List<Long> userIds = headers.stream()
+                .map(InternshipHeader::getUserId)
+                .distinct()
                 .collect(Collectors.toList());
+        Map<Long, String> userNameMap = userService.getUserNameMap(userIds);
 
-        List<CompanyReviewsResponse.ReviewItem> paginatedItems = items.stream()
-                .limit(limit + 1)
-                .collect(Collectors.toList());
-
-        boolean hasMore = paginatedItems.size() > limit;
-        if (hasMore) {
-            paginatedItems = paginatedItems.subList(0, limit);
-        }
-
-        Long nextCursor = null;
-        Long previousCursor = cursor;
-        
-        if (hasMore && !paginatedItems.isEmpty()) {
-            nextCursor = paginatedItems.get(paginatedItems.size() - 1).getInternshipHeaderId();
-        }
-
-        return CursorPageResponse.<CompanyReviewsResponse.ReviewItem>builder()
-                .result(paginatedItems)
-                .meta(CursorPageResponse.Meta.builder()
-                        .nextCursor(nextCursor)
-                        .previousCursor(previousCursor)
-                        .size(paginatedItems.size())
-                        .hasMore(hasMore)
-                        .build())
-                .build();
+        return new ReviewDataBundle(detailMap, subCategoriesMap, stepsMap, lookupDescMap, userNameMap);
     }
 
     private void validateAdditionalSubCategories(List<Long> subCategoryIds) {
@@ -427,11 +621,12 @@ public class ReviewService implements IReviewService {
             return;
         }
 
-        if (subCategoryIds.size() > 3) {
-            throw new ValidationException("Maximum 3 additional subcategories allowed");
+        if (subCategoryIds.size() > MAX_SUB_CATEGORIES) {
+            throw new ValidationException("Maximum " + MAX_SUB_CATEGORIES + " additional subcategories allowed");
         }
 
         Set<Long> idSet = new HashSet<>(subCategoryIds);
+
         if (idSet.size() != subCategoryIds.size()) {
             throw new ValidationException("Duplicate subcategory IDs not allowed");
         }
@@ -446,10 +641,13 @@ public class ReviewService implements IReviewService {
     @Override
     public Map<Long, Double> getRatingsByCompanyIds(List<Long> companyIds) {
         if (companyIds == null || companyIds.isEmpty()) return Map.of();
+
         Map<Long, Double> result = new HashMap<>();
+
         for (CompanyRatingProjection row : internshipDetailRepository.findAverageRatingsByCompanyIds(companyIds)) {
             result.put(row.getCompanyId(), row.getAvgRating());
         }
+
         return result;
     }
 
@@ -463,10 +661,13 @@ public class ReviewService implements IReviewService {
     @Override
     public Map<Long, Long> getReviewCountsByCompanyIds(List<Long> companyIds) {
         if (companyIds == null || companyIds.isEmpty()) return Map.of();
+
         Map<Long, Long> result = new HashMap<>();
+
         for (CompanyReviewCountProjection row : internshipDetailRepository.findReviewCountsByCompanyIds(companyIds)) {
             result.put(row.getCompanyId(), row.getReviewCount());
         }
+
         return result;
     }
 
@@ -475,18 +676,153 @@ public class ReviewService implements IReviewService {
         List<RecentReviewProjection> results = internshipDetailRepository.findTop10RecentReviews();
 
         List<RecentReviewResponse.ReviewItem> items = results.stream()
-                .map(row -> RecentReviewResponse.ReviewItem.builder()
-                        .testimony(row.getTestimony())
-                        .createdBy(row.getCreatedByName())
-                        .averageRating(row.getAverageRating() != null ? row.getAverageRating() : 0.0)
-                        .companyName(row.getCompanyName())
-                        .companyCategory(row.getCompanyCategory())
-                        .companyWebsite(row.getCompanyWebsite())
-                        .jobTitle(row.getJobTitle())
-                        .createdAt(OffsetDateTime.ofInstant(row.getCreatedAt(), ZoneId.systemDefault()))
-                        .build())
+                .map(this::toRecentReviewItem)
                 .collect(Collectors.toList());
 
+        return toRecentReviewResponse(items);
+    }
+
+    private record ReviewDataBundle(
+            Map<Long, InternshipDetail> detailMap,
+            Map<Long, List<String>> subCategoriesMap,
+            Map<Long, List<Integer>> stepsMap,
+            Map<String, Map<String, String>> lookupDescMap,
+            Map<Long, String> userNameMap
+    ) {}
+
+    private JobListItemResponse toJobListItemResponse(String jobTitle) {
+        return JobListItemResponse.builder()
+                .jobTitle(jobTitle)
+                .build();
+    }
+
+    private ReviewResponse toSubmitResponse(InternshipHeader savedHeader, InternshipDetail savedDetail, OffsetDateTime now) {
+        return ReviewResponse.builder()
+                .internshipHeaderId(savedHeader.getInternshipHeaderId())
+                .internshipDetailId(savedDetail.getInternshipDetailId())
+                .createdAt(now)
+                .message(MessageConstants.Success.REVIEW_SUBMITTED_SUCCESSFULLY)
+                .build();
+    }
+
+    private ReviewSummaryResponse toSummaryResponse(
+            String type, String duration, List<String> workSchemes, List<String> subCategories,
+            ReviewSummaryResponse.Ratings ratings, ReviewSummaryResponse.RecruitmentProcesses recruitmentProcesses) {
+        return ReviewSummaryResponse.builder()
+                .informationDetails(ReviewSummaryResponse.InformationDetails.builder()
+                        .type(type)
+                        .workScheme(workSchemes)
+                        .duration(duration)
+                        .subCategories(subCategories)
+                        .build())
+                .ratings(ratings)
+                .recruitmentProcesses(recruitmentProcesses)
+                .build();
+    }
+
+    private CompanyReviewsResponse.ReviewItem toReviewItem(InternshipHeader header, ReviewDataBundle data) {
+        log.info("[toReviewItem] headerId={}, userId={}", header.getInternshipHeaderId(), header.getUserId());
+        InternshipDetail detail = data.detailMap().get(header.getInternshipHeaderId());
+
+        if (detail == null) {
+            log.warn("[toReviewItem] no detail found for headerId={}", header.getInternshipHeaderId());
+        } else {
+            log.info("[toReviewItem] detailId={}, type={}, scheme={}, admissionTrack={}, recruitmentDurationCode={}",
+                    detail.getInternshipDetailId(), detail.getType(), detail.getScheme(),
+                    detail.getAdmissionTrack(), detail.getRecruitmentDurationCode());
+        }
+
+        Long headerId = header.getInternshipHeaderId();
+
+        CompanyReviewsResponse.Ratings ratings = detail != null
+                ? CompanyReviewsResponse.Ratings.builder()
+                        .workCulture(detail.getWorkCultureRating())
+                        .learningOpp(detail.getLearningOpportunityRating())
+                        .mentorship(detail.getMentorshipRating())
+                        .benefit(detail.getBenefitsRating())
+                        .workLifeBalance(detail.getWorkLifeBalanceRating())
+                        .build()
+                : null;
+
+        Integer year = header.getStartYear() != null ? header.getStartYear().getYear() : null;
+
+        return CompanyReviewsResponse.ReviewItem.builder()
+                .internshipHeaderId(headerId)
+                .internshipDetailId(detail != null ? detail.getInternshipDetailId() : null)
+                .jobTitle(header.getJobTitle())
+                .type(detail != null ? data.lookupDescMap().getOrDefault(LOOKUP_CODE_INTERNSHIP_TYPE, Map.of()).get(detail.getType()) : null)
+                .workScheme(detail != null ? data.lookupDescMap().getOrDefault(LOOKUP_CODE_SCHEME, Map.of()).get(detail.getScheme()) : null)
+                .admissionTrack(detail != null ? data.lookupDescMap().getOrDefault(LOOKUP_CODE_ADMISSION_TRACK, Map.of()).get(detail.getAdmissionTrack()) : null)
+                .recruitmentDuration(detail != null ? data.lookupDescMap().getOrDefault(LOOKUP_CODE_RECRUITMENT_DURATION, Map.of()).get(detail.getRecruitmentDurationCode()) : null)
+                .durationMonths(header.getDurationMonths())
+                .year(year)
+                .subCategories(data.subCategoriesMap().getOrDefault(headerId, List.of()))
+                .ratings(ratings)
+                .recruitmentSteps(data.stepsMap().getOrDefault(headerId, List.of()).stream()
+                        .map(stepCode -> data.lookupDescMap().getOrDefault(LOOKUP_CODE_RECRUITMENT_STEPS, Map.of()).get(String.valueOf(stepCode)))
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList()))
+                .interviewDifficulty(detail != null ? detail.getInterviewDifficultyRating() : null)
+                .createdByName(data.userNameMap().get(header.getUserId()))
+                .testimony(detail != null ? detail.getTestimony() : null)
+                .pros(detail != null ? detail.getPros() : null)
+                .cons(detail != null ? detail.getCons() : null)
+                .exampleQuestions(detail != null ? detail.getExampleQuestions() : null)
+                .selectionProcess(detail != null ? detail.getSelectionProcess() : null)
+                .tipsTricks(detail != null ? detail.getTipsTricks() : null)
+                .createdAt(detail != null ? detail.getCreatedAt() : null)
+                .build();
+    }
+
+    private RecruitmentProcessResponse.ProcessItem toProcessItem(InternshipHeader header, ReviewDataBundle data) {
+        log.info("[toProcessItem] headerId={}, userId={}", header.getInternshipHeaderId(), header.getUserId());
+        InternshipDetail detail = data.detailMap().get(header.getInternshipHeaderId());
+
+        if (detail == null) {
+            log.warn("[toProcessItem] no detail found for headerId={}", header.getInternshipHeaderId());
+        }
+
+        Long headerId = header.getInternshipHeaderId();
+        Integer year = header.getStartYear() != null ? header.getStartYear().getYear() : null;
+
+        return RecruitmentProcessResponse.ProcessItem.builder()
+                .internshipHeaderId(headerId)
+                .internshipDetailId(detail != null ? detail.getInternshipDetailId() : null)
+                .jobTitle(header.getJobTitle())
+                .type(detail != null ? data.lookupDescMap().getOrDefault(LOOKUP_CODE_INTERNSHIP_TYPE, Map.of()).get(detail.getType()) : null)
+                .workScheme(detail != null ? data.lookupDescMap().getOrDefault(LOOKUP_CODE_SCHEME, Map.of()).get(detail.getScheme()) : null)
+                .admissionTrack(detail != null ? data.lookupDescMap().getOrDefault(LOOKUP_CODE_ADMISSION_TRACK, Map.of()).get(detail.getAdmissionTrack()) : null)
+                .recruitmentDuration(detail != null ? data.lookupDescMap().getOrDefault(LOOKUP_CODE_RECRUITMENT_DURATION, Map.of()).get(detail.getRecruitmentDurationCode()) : null)
+                .durationMonths(header.getDurationMonths())
+                .year(year)
+                .subCategories(data.subCategoriesMap().getOrDefault(headerId, List.of()))
+                .recruitmentSteps(data.stepsMap().getOrDefault(headerId, List.of()).stream()
+                        .map(stepCode -> data.lookupDescMap().getOrDefault(LOOKUP_CODE_RECRUITMENT_STEPS, Map.of()).get(String.valueOf(stepCode)))
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList()))
+                .interviewDifficulty(detail != null ? detail.getInterviewDifficultyRating() : null)
+                .createdByName(data.userNameMap().get(header.getUserId()))
+                .exampleQuestions(detail != null ? detail.getExampleQuestions() : null)
+                .selectionProcess(detail != null ? detail.getSelectionProcess() : null)
+                .tipsTricks(detail != null ? detail.getTipsTricks() : null)
+                .createdAt(detail != null ? detail.getCreatedAt() : null)
+                .build();
+    }
+
+    private RecentReviewResponse.ReviewItem toRecentReviewItem(RecentReviewProjection row) {
+        return RecentReviewResponse.ReviewItem.builder()
+                .testimony(row.getTestimony())
+                .createdBy(row.getCreatedByName())
+                .averageRating(row.getAverageRating() != null ? row.getAverageRating() : 0.0)
+                .companyName(row.getCompanyName())
+                .companyCategory(row.getCompanyCategory())
+                .companyWebsite(row.getCompanyWebsite())
+                .jobTitle(row.getJobTitle())
+                .createdAt(OffsetDateTime.ofInstant(row.getCreatedAt(), ZoneId.systemDefault()))
+                .build();
+    }
+
+    private RecentReviewResponse toRecentReviewResponse(List<RecentReviewResponse.ReviewItem> items) {
         return RecentReviewResponse.builder()
                 .items(items)
                 .build();

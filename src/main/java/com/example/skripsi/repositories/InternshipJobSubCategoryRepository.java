@@ -14,4 +14,6 @@ public interface InternshipJobSubCategoryRepository extends JpaRepository<Intern
 
     @Query("SELECT ijsc FROM InternshipJobSubCategory ijsc WHERE ijsc.internshipHeaderId IN (SELECT ih.internshipHeaderId FROM InternshipHeader ih WHERE ih.companyId = :companyId)")
     List<InternshipJobSubCategory> findAllSubCategoriesByCompanyId(@Param("companyId") Long companyId);
+
+    List<InternshipJobSubCategory> findByInternshipHeaderIdIn(List<Long> headerIds);
 }

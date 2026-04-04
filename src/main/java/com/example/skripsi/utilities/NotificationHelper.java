@@ -63,6 +63,7 @@ public class NotificationHelper {
         } else {
             UserNotification existingUserNotif = userNotificationRepository
                     .findByUserIdAndNotification_NotificationId(userId, notification.getNotificationId());
+
             if (existingUserNotif != null) {
                 existingUserNotif.setCreatedAt(OffsetDateTime.now());
                 userNotificationRepository.save(existingUserNotif);

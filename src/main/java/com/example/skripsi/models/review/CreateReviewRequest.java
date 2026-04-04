@@ -47,10 +47,11 @@ public class CreateReviewRequest {
     @NotNull
     private RatingsRequest ratings;
 
-    private List<String> recruitmentProcess;
+    @Size(max = 10)
+    private List<Long> recruitmentSteps;
 
     @NotNull
-    @Min(0)
+    @Min(1)
     @Max(5)
     private Integer interviewDifficulty;
 
@@ -66,33 +67,48 @@ public class CreateReviewRequest {
     @Size(max = 500)
     private String cons;
 
+    @Size(max = 10)
+    private String admissionTrack;
+
+    @Size(max = 10)
+    private String recruitmentDurationCode;
+
+    @Size(max = 500)
+    private String exampleQuestions;
+
+    @Size(max = 500)
+    private String selectionProcess;
+
+    @Size(max = 500)
+    private String tipsTricks;
+
     @Data
     @Builder
     @AllArgsConstructor
     @NoArgsConstructor
     public static class RatingsRequest {
         @NotNull
-        @Min(0)
+        @Min(1)
         @Max(5)
         private Integer workCulture;
 
         @NotNull
-        @Min(0)
+        @Min(1)
         @Max(5)
         private Integer learningOpp;
 
         @NotNull
-        @Min(0)
+        @Min(1)
         @Max(5)
         private Integer mentorship;
 
         @NotNull
-        @Min(0)
+        @Min(1)
         @Max(5)
         private Integer benefit;
 
         @NotNull
-        @Min(0)
+        @Min(1)
         @Max(5)
         private Integer workLifeBalance;
     }

@@ -56,6 +56,7 @@ public class CategoryService implements ICategoryService {
 
     public CategoryResponse toResponse(Category category, boolean includeSubCategories) {
         List<SubCategoryResponse> subCategoryResponses = null;
+
         if (includeSubCategories && category.getSubCategories() != null) {
             subCategoryResponses = category.getSubCategories().stream()
                     .map(sub -> SubCategoryResponse.builder()
@@ -64,6 +65,7 @@ public class CategoryService implements ICategoryService {
                             .build())
                     .collect(Collectors.toList());
         }
+
         return CategoryResponse.builder()
                 .categoryId(category.getCategoryId())
                 .categoryName(category.getCategoryName())
@@ -79,6 +81,7 @@ public class CategoryService implements ICategoryService {
     public CursorPageResponse<CompanyOptionsResponse> getCompaniesBySubCategoryName(
             String subCategoryName, String type, Long cursor, int limit) {
         String normalizedType = type == null ? "" : type.trim().toLowerCase();
+
         if (!TypeConstants.COMPANIES.equals(normalizedType) && !TypeConstants.JOBS.equals(normalizedType)) {
             throw new BadRequestExceptions(MessageConstants.Validation.INVALID_TYPE_COMPANIES_OR_JOBS);
         }
@@ -87,13 +90,17 @@ public class CategoryService implements ICategoryService {
             return companyService.getCompaniesBySubCategoryNameViaProfile(subCategoryName, cursor, limit);
         } else {
             var subCategory = subCategoryRepository.findBySubCategoryNameIgnoreCase(subCategoryName);
+
             if (subCategory.isEmpty()) {
                 return emptyCursorPageResponse();
             }
+
             SubCategory sub = subCategory.get();
+
             if (sub.getCategory() == null || !"jobs".equalsIgnoreCase(sub.getCategory().getCategoryType())) {
                 return emptyCursorPageResponse();
             }
+
             return companyService.getCompaniesBySubCategoryIdViaProfile(sub.getSubCategoryId(), cursor, limit);
         }
     }

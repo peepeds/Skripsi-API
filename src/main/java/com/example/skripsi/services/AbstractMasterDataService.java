@@ -99,6 +99,7 @@ public abstract class AbstractMasterDataService<Entity, Response, CreateRequest,
         if (userId == null) {
             return null;
         }
+
         return userNameMap.get(userId);
     }
 
