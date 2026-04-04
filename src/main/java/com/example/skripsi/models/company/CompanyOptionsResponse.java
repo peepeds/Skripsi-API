@@ -18,6 +18,7 @@ public class CompanyOptionsResponse {
     private Boolean isPartner;
     private String subcategoryName;
     private String companySlug;
+    private String bio;
     private Double rating;
     @Builder.Default
     private Long totalReviews = 0L;

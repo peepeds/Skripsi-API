@@ -98,4 +98,70 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
             @Param("subCategoryName") String subCategoryName,
             Pageable pageable
     );
+
+    @Query("""
+        SELECT c FROM Company c
+        WHERE (:cursor IS NULL OR c.companyId > :cursor)
+        ORDER BY c.companyId ASC
+    """)
+    List<Company> findPageFromCursor(@Param("cursor") Long cursor, Pageable pageable);
+
+    @Query("""
+        SELECT DISTINCT new com.example.skripsi.models.company.CompanyOptionsResponse(
+            c.companyId,
+            c.companyName,
+            c.companyAbbreviation,
+            c.companySlug
+        )
+        FROM Company c
+        JOIN InternshipHeader ih ON ih.company = c
+        JOIN InternshipJobSubCategory ijs ON ijs.internshipHeaderId = ih.internshipHeaderId
+        WHERE ijs.subCategoryId = :subCategoryId
+          AND (:cursor IS NULL OR c.companyId > :cursor)
+        ORDER BY c.companyId ASC
+    """)
+    List<CompanyOptionsResponse> findCompaniesBySubCategoryIdFromCursor(
+            @Param("subCategoryId") Long subCategoryId,
+            @Param("cursor") Long cursor,
+            Pageable pageable
+    );
+
+    @Query("""
+        SELECT DISTINCT new com.example.skripsi.models.company.CompanyOptionsResponse(
+            c.companyId,
+            c.companyName,
+            c.companyAbbreviation,
+            c.companySlug
+        )
+        FROM Company c
+        JOIN CompanyProfile cp ON cp.companyId = c.companyId
+        WHERE cp.subcategoryId = :subCategoryId
+          AND (:cursor IS NULL OR c.companyId > :cursor)
+        ORDER BY c.companyId ASC
+    """)
+    List<CompanyOptionsResponse> findCompaniesBySubCategoryIdViaProfileFromCursor(
+            @Param("subCategoryId") Long subCategoryId,
+            @Param("cursor") Long cursor,
+            Pageable pageable
+    );
+
+    @Query("""
+        SELECT DISTINCT new com.example.skripsi.models.company.CompanyOptionsResponse(
+            c.companyId,
+            c.companyName,
+            c.companyAbbreviation,
+            c.companySlug
+        )
+        FROM Company c
+        JOIN CompanyProfile cp ON cp.companyId = c.companyId
+        JOIN SubCategory sc ON sc.subCategoryId = cp.subcategoryId
+        WHERE LOWER(sc.subCategoryName) = LOWER(:subCategoryName)
+          AND (:cursor IS NULL OR c.companyId > :cursor)
+        ORDER BY c.companyId ASC
+    """)
+    List<CompanyOptionsResponse> findCompaniesBySubCategoryNameViaProfileFromCursor(
+            @Param("subCategoryName") String subCategoryName,
+            @Param("cursor") Long cursor,
+            Pageable pageable
+    );
 }

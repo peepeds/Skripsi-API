@@ -41,6 +41,7 @@ public class DepartmentService extends AbstractMasterDataService<Department, Dep
     @Override
     protected void validateBeforeCreate(CreateDepartmentRequest request) {
         boolean isExists = departmentRepository.existsByDeptNameIgnoreCase(request.getDeptName().trim());
+
         if (isExists) {
             throw new BadRequestExceptions("Department Name already exists!");
         }
@@ -61,6 +62,7 @@ public class DepartmentService extends AbstractMasterDataService<Department, Dep
         if (request.getDeptName() != null) {
             entity.setDeptName(request.getDeptName());
         }
+
         if (request.getActive() != null) {
             entity.setActive(request.getActive());
         }

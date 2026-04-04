@@ -46,6 +46,7 @@ public class RegionService extends AbstractMasterDataService<Region, RegionRespo
     @Override
     protected void validateBeforeCreate(CreateRegionRequest request) {
         boolean isExists = regionRepository.existsByRegionNameIgnoreCase(request.getRegionName().trim());
+
         if (isExists) {
             throw new BadRequestExceptions("Region Name already exists!");
         }
@@ -66,6 +67,7 @@ public class RegionService extends AbstractMasterDataService<Region, RegionRespo
         if (request.getRegionName() != null) {
             entity.setRegionName(request.getRegionName());
         }
+
         if (request.getActive() != null) {
             entity.setActive(request.getActive());
         }

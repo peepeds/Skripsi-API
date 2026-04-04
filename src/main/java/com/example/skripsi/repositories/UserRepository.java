@@ -7,7 +7,6 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 @Repository
@@ -38,5 +37,5 @@ public interface UserRepository extends JpaRepository<User,Long> {
     List<User> getUserByUserPrivilege(@Param("userPrivilege") String userPrivilege, @Param("userId") Long userId);
 
     @Query("SELECT u FROM User u WHERE u.userId IN :userIds")
-    Map<Long, User> findByUserIdMap(@Param("userIds") List<Long> userIds);
+    List<User> findByUserIdMap(@Param("userIds") List<Long> userIds);
 }

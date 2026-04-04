@@ -67,4 +67,8 @@ public class MessageConstants {
     public static class Async {
         public static final String ASYNC_OPERATION_FAILED = "Async operation failed: ";
     }
+
+    public static class Error {
+        public static final String INTERNAL_SERVER_ERROR = "An unexpected error occurred. Please try again later.";
+    }
 }

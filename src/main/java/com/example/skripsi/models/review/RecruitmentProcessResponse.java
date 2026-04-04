@@ -14,15 +14,15 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class CompanyReviewsResponse {
-    private List<ReviewItem> items;
+public class RecruitmentProcessResponse {
+    private List<ProcessItem> items;
 
     @Data
     @Builder
     @AllArgsConstructor
     @NoArgsConstructor
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public static class ReviewItem {
+    public static class ProcessItem {
         private Long internshipHeaderId;
         private Long internshipDetailId;
         private String jobTitle;
@@ -33,29 +33,12 @@ public class CompanyReviewsResponse {
         private Integer durationMonths;
         private Integer year;
         private List<String> subCategories;
-        private Ratings ratings;
         private List<String> recruitmentSteps;
         private Integer interviewDifficulty;
         private String createdByName;
-        private String testimony;
-        private String pros;
-        private String cons;
         private String exampleQuestions;
         private String selectionProcess;
         private String tipsTricks;
         private OffsetDateTime createdAt;
-    }
-
-    @Data
-    @Builder
-    @AllArgsConstructor
-    @NoArgsConstructor
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    public static class Ratings {
-        private Integer workCulture;
-        private Integer learningOpp;
-        private Integer mentorship;
-        private Integer benefit;
-        private Integer workLifeBalance;
     }
 }

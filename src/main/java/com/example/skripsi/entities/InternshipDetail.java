@@ -53,6 +53,21 @@ public class InternshipDetail {
     @Column(name = "cons", length = 500)
     private String cons;
 
+    @Column(name = "admission_track", length = 10)
+    private String admissionTrack;
+
+    @Column(name = "recruitment_duration_code", length = 10)
+    private String recruitmentDurationCode;
+
+    @Column(name = "example_questions", length = 500)
+    private String exampleQuestions;
+
+    @Column(name = "selection_process", length = 500)
+    private String selectionProcess;
+
+    @Column(name = "tips_tricks", length = 500)
+    private String tipsTricks;
+
     @Column(name = "created_at")
     private OffsetDateTime createdAt;
 

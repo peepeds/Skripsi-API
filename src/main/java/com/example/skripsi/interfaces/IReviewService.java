@@ -5,6 +5,8 @@ import com.example.skripsi.models.review.ReviewResponse;
 import com.example.skripsi.models.review.ReviewSummaryResponse;
 import com.example.skripsi.models.review.CompanyReviewsResponse;
 import com.example.skripsi.models.review.RecentReviewResponse;
+import com.example.skripsi.models.review.RecruitmentProcessResponse;
+import com.example.skripsi.models.review.RecruitmentProcessSummaryResponse;
 import com.example.skripsi.models.job.JobListItemResponse;
 import com.example.skripsi.models.CursorPageResponse;
 
@@ -17,6 +19,8 @@ public interface IReviewService {
     List<JobListItemResponse> searchJobOptions(String query);
     ReviewSummaryResponse getCompanySummary(String slug);
     CursorPageResponse<CompanyReviewsResponse.ReviewItem> getCompanyReviews(String slug, String order, Long cursor, int limit);
+    CursorPageResponse<RecruitmentProcessResponse.ProcessItem> getRecruitmentProcesses(String slug, Long cursor, int limit);
+    RecruitmentProcessSummaryResponse getRecruitmentProcessSummary(String slug);
     RecentReviewResponse getRecentReviews();
 
     Map<Long, Double> getRatingsByCompanyIds(List<Long> companyIds);
