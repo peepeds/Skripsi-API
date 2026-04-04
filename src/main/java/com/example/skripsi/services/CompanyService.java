@@ -76,31 +76,6 @@ public class CompanyService implements ICompanyService {
         }
     }
 
-    private CompanyEnrichmentData fetchEnrichmentData(List<Long> companyIds) {
-        if (companyIds.isEmpty()) {
-            return new CompanyEnrichmentData(new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>());
-        }
-
-        Map<Long, Double> ratingMap = reviewService.getRatingsByCompanyIds(companyIds);
-        Map<Long, Long> reviewCountMap = reviewService.getReviewCountsByCompanyIds(companyIds);
-
-        List<CompanyProfile> profiles = companyProfileRepository.findByCompanyIds(companyIds);
-        Map<Long, CompanyProfile> profileMap = new HashMap<>();
-
-        for (CompanyProfile profile : profiles) {
-            profileMap.put(profile.getCompanyId(), profile);
-        }
-
-        List<Long> subcategoryIds = profiles.stream()
-                .map(CompanyProfile::getSubcategoryId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-
-        Map<Long, String> subcategoryNameMap = categoryService.getSubCategoryNameMap(subcategoryIds);
-
-        return new CompanyEnrichmentData(ratingMap, reviewCountMap, profileMap, subcategoryNameMap);
-    }
-
     @Override
     public CursorPageResponse<CompanyOptionsResponse> getCompany(Long cursor, int limit) {
         log.info("[getCompany] cursor={} limit={}", cursor, limit);
@@ -229,6 +204,214 @@ public class CompanyService implements ICompanyService {
         return toRequestResponse(savedRequest);
     }
 
+    @Override
+    public CompanyRequestDetailResponse getCompanyRequestDetail(Long requestId) {
+        Long currentUserId = securityUtils.getCurrentUserId();
+
+        CompanyRequest companyRequest = companyRequestRepository.findById(requestId)
+                .orElseThrow(() -> new BadRequestExceptions(MessageConstants.NotFound.COMPANY_REQUEST_NOT_FOUND));
+
+        if (!companyRequest.getCreatedBy().equals(currentUserId)) {
+            throw new CustomAccessDeniedException(MessageConstants.NotFound.ACCESS_DENIED_OWN_REQUESTS);
+        }
+
+        return toDetailResponse(companyRequest);
+    }
+
+    @Override
+    public List<CompanyOptionsResponse> searchCompanies(String search) {
+        log.info("[searchCompanies] search={}", search);
+        List<CompanyOptionsResponse> searchResults = companyRepository.searchCompanies(search);
+
+        if (searchResults.isEmpty()) {
+            return searchResults;
+        }
+
+        List<Long> companyIds = searchResults.stream()
+                .map(CompanyOptionsResponse::getCompanyId)
+                .collect(Collectors.toList());
+
+        CompanyEnrichmentData enrichment = fetchEnrichmentData(companyIds);
+
+        Map<Long, Company> companyMap = companyRepository.findAllById(companyIds).stream()
+                .collect(Collectors.toMap(Company::getCompanyId, company -> company));
+
+        return searchResults.stream()
+                .map(result -> {
+                    Company company = companyMap.get(result.getCompanyId());
+                    return company != null ? toOptionsResponse(company, enrichment) : result;
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<CompanyOptionsResponse> getTopCompaniesAvgRating() {
+        List<Long> companyIds = reviewService.getTop10CompanyIdsByRating();
+
+        if (companyIds.isEmpty()) {
+            return List.of();
+        }
+
+        CompanyEnrichmentData enrichment = fetchEnrichmentData(companyIds);
+
+        Map<Long, Company> companyMap = companyRepository.findAllById(companyIds).stream()
+                .collect(Collectors.toMap(Company::getCompanyId, company -> company));
+
+        return companyIds.stream()
+                .map(companyMap::get)
+                .filter(Objects::nonNull)
+                .map(company -> toOptionsResponse(company, enrichment))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public Long getCompanyIdBySlug(String slug) {
+        Company company = companyRepository.findByCompanySlug(slug);
+
+        if (company == null) {
+            log.warn("[getCompanyIdBySlug] company not found slug={}", slug);
+            throw new ResourceNotFoundException("Company with slug '" + slug + "' not found");
+        }
+
+        return company.getCompanyId();
+    }
+
+    @Override
+    public String getCompanyRequestName(Long requestId) {
+        return companyRequestRepository.findById(requestId)
+                .map(CompanyRequest::getCompanyName)
+                .orElse("Unknown");
+    }
+
+    @Override
+    public CursorPageResponse<CompanyOptionsResponse> getCompaniesBySubCategoryId(Long subCategoryId, Long cursor, int limit) {
+        Pageable pageable = PageRequest.of(0, limit + 1);
+        List<CompanyOptionsResponse> companies = companyRepository.findCompaniesBySubCategoryIdFromCursor(subCategoryId, cursor, pageable);
+        return buildCompanyOptionsCursorPage(companies, cursor, limit);
+    }
+
+    @Override
+    public CursorPageResponse<CompanyOptionsResponse> getCompaniesBySubCategoryIdViaProfile(Long subCategoryId, Long cursor, int limit) {
+        Pageable pageable = PageRequest.of(0, limit + 1);
+        List<CompanyOptionsResponse> companies = companyRepository.findCompaniesBySubCategoryIdViaProfileFromCursor(subCategoryId, cursor, pageable);
+        return buildCompanyOptionsCursorPage(companies, cursor, limit);
+    }
+
+    @Override
+    public CursorPageResponse<CompanyOptionsResponse> getCompaniesBySubCategoryNameViaProfile(String subCategoryName, Long cursor, int limit) {
+        Pageable pageable = PageRequest.of(0, limit + 1);
+        List<CompanyOptionsResponse> companies = companyRepository.findCompaniesBySubCategoryNameViaProfileFromCursor(subCategoryName, cursor, pageable);
+        return buildCompanyOptionsCursorPage(companies, cursor, limit);
+    }
+
+    @Override
+    public CompanyOptionsResponse getCompanyBySlug(String slug) {
+        log.info("[getCompanyBySlug] slug={}", slug);
+        Company company = companyRepository.findByCompanySlug(slug);
+
+        if (company == null) {
+            log.warn("[getCompanyBySlug] company not found slug={}", slug);
+            throw new BadRequestExceptions("Company not found");
+        }
+
+        CompanyProfile profile = companyProfileRepository.findByCompanyId(company.getCompanyId());
+
+        if (profile == null) {
+            log.warn("[getCompanyBySlug] profile not found companyId={}", company.getCompanyId());
+            throw new BadRequestExceptions("Company profile not found");
+        }
+
+        CompanyEnrichmentData enrichment = fetchEnrichmentData(Collections.singletonList(company.getCompanyId()));
+
+        String subcategoryName = profile.getSubcategoryId() != null
+                ? enrichment.subcategoryNameMap.get(profile.getSubcategoryId())
+                : null;
+
+        return CompanyOptionsResponse.builder()
+                .companyId(company.getCompanyId())
+                .companyName(company.getCompanyName())
+                .companyAbbreviation(company.getCompanyAbbreviation())
+                .website(profile.getWebsite())
+                .bio(profile.getBio())
+                .isPartner(profile.getIsPartner())
+                .subcategoryName(subcategoryName)
+                .companySlug(company.getCompanySlug())
+                .rating(enrichment.ratingMap.get(company.getCompanyId()))
+                .totalReviews(enrichment.reviewCountMap.getOrDefault(company.getCompanyId(), 0L))
+                .build();
+    }
+
+    @Override
+    public Boolean isCompanyRequestOwner(Long requestId, Long userId) {
+        if (requestId == null || userId == null) return false;
+        return companyRequestRepository.findById(requestId)
+                .map(req -> req.getCreatedBy().equals(userId))
+                .orElse(false);
+    }
+
+    private CompanyEnrichmentData fetchEnrichmentData(List<Long> companyIds) {
+        if (companyIds.isEmpty()) {
+            return new CompanyEnrichmentData(new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>());
+        }
+
+        Map<Long, Double> ratingMap = reviewService.getRatingsByCompanyIds(companyIds);
+        Map<Long, Long> reviewCountMap = reviewService.getReviewCountsByCompanyIds(companyIds);
+
+        List<CompanyProfile> profiles = companyProfileRepository.findByCompanyIds(companyIds);
+        Map<Long, CompanyProfile> profileMap = new HashMap<>();
+
+        for (CompanyProfile profile : profiles) {
+            profileMap.put(profile.getCompanyId(), profile);
+        }
+
+        List<Long> subcategoryIds = profiles.stream()
+                .map(CompanyProfile::getSubcategoryId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+        Map<Long, String> subcategoryNameMap = categoryService.getSubCategoryNameMap(subcategoryIds);
+
+        return new CompanyEnrichmentData(ratingMap, reviewCountMap, profileMap, subcategoryNameMap);
+    }
+
+    private CompanyOptionsResponse toOptionsResponse(Company company, CompanyEnrichmentData enrichment) {
+        CompanyProfile profile = enrichment.profileMap.get(company.getCompanyId());
+        String subcategoryName = (profile != null && profile.getSubcategoryId() != null)
+                ? enrichment.subcategoryNameMap.get(profile.getSubcategoryId())
+                : null;
+
+        Long totalReviews = enrichment.reviewCountMap.getOrDefault(company.getCompanyId(), 0L);
+
+        return CompanyOptionsResponse.builder()
+                .companyId(company.getCompanyId())
+                .companyName(company.getCompanyName())
+                .companyAbbreviation(company.getCompanyAbbreviation())
+                .website(profile != null ? profile.getWebsite() : null)
+                .isPartner(profile != null ? profile.getIsPartner() : null)
+                .subcategoryName(subcategoryName)
+                .companySlug(company.getCompanySlug())
+                .rating(enrichment.ratingMap.get(company.getCompanyId()))
+                .totalReviews(totalReviews)
+                .build();
+    }
+
+    private CompanyRequestResponse toRequestResponse(CompanyRequest companyRequest) {
+        return CompanyRequestResponse.builder()
+                .companyRequestId(companyRequest.getCompanyRequestId())
+                .companyName(companyRequest.getCompanyName())
+                .companyAbbreviation(companyRequest.getCompanyAbbreviation())
+                .website(companyRequest.getWebsite())
+                .isPartner(companyRequest.getIsPartner())
+                .subcategoryId(companyRequest.getSubcategoryId())
+                .status(companyRequest.getStatus())
+                .createdAt(companyRequest.getCreatedAt())
+                .createdBy(resolveUserName(companyRequest.getCreatedBy()))
+                .reviewedAt(companyRequest.getReviewedAt())
+                .reviewedBy(resolveUserName(companyRequest.getReviewedBy()))
+                .reviewNote(companyRequest.getReviewNote())
+                .build();
+    }
+
     private void validateCompanyRequestNotFinalized(CompanyRequest companyRequest) {
         if (companyRequest.getStatus() == CompanyRequestStatus.APPROVED
                 || companyRequest.getStatus() == CompanyRequestStatus.REJECTED) {
@@ -280,109 +463,21 @@ public class CompanyService implements ICompanyService {
         notificationHelper.updateOrCreateUserNotification(existingNotification, companyRequest.getCreatedBy());
     }
 
-    @Override
-    public CompanyRequestDetailResponse getCompanyRequestDetail(Long requestId) {
-        Long currentUserId = securityUtils.getCurrentUserId();
-
-        CompanyRequest companyRequest = companyRequestRepository.findById(requestId)
-                .orElseThrow(() -> new BadRequestExceptions(MessageConstants.NotFound.COMPANY_REQUEST_NOT_FOUND));
-
-        // Only the owner of the request may view its detail
-
-        if (!companyRequest.getCreatedBy().equals(currentUserId)) {
-            throw new CustomAccessDeniedException(MessageConstants.NotFound.ACCESS_DENIED_OWN_REQUESTS);
-        }
-
-        return toDetailResponse(companyRequest);
-    }
-
-    @Override
-    public List<CompanyOptionsResponse> searchCompanies(String search) {
-        log.info("[searchCompanies] search={}", search);
-        List<CompanyOptionsResponse> searchResults = companyRepository.searchCompanies(search);
-
-        if (searchResults.isEmpty()) {
-            return searchResults;
-        }
-
-        List<Long> companyIds = searchResults.stream()
-                .map(CompanyOptionsResponse::getCompanyId)
-                .collect(Collectors.toList());
-
-        CompanyEnrichmentData enrichment = fetchEnrichmentData(companyIds);
-
-        Map<Long, Company> companyMap = companyRepository.findAllById(companyIds).stream()
-                .collect(Collectors.toMap(Company::getCompanyId, company -> company));
-
-        return searchResults.stream()
-                .map(result -> {
-                    Company company = companyMap.get(result.getCompanyId());
-                    return company != null ? toOptionsResponse(company, enrichment) : result;
-                })
-                .collect(Collectors.toList());
-    }
-
-    public List<CompanyOptionsResponse> getTopCompaniesAvgRating() {
-        List<Long> companyIds = reviewService.getTop10CompanyIdsByRating();
-
-        if (companyIds.isEmpty()) {
-            return List.of();
-        }
-
-        CompanyEnrichmentData enrichment = fetchEnrichmentData(companyIds);
-
-        Map<Long, Company> companyMap = companyRepository.findAllById(companyIds).stream()
-                .collect(Collectors.toMap(Company::getCompanyId, company -> company));
-
-        return companyIds.stream()
-                .map(companyMap::get)
-                .filter(Objects::nonNull)
-                .map(company -> toOptionsResponse(company, enrichment))
-                .collect(Collectors.toList());
-    }
-
     private String resolveUserName(Long userId) {
         return userService.resolveUserName(userId);
     }
 
-    @Override
-    public Long getCompanyIdBySlug(String slug) {
-        Company company = companyRepository.findByCompanySlug(slug);
+    private String generateAbbreviation(String companyName) {
+        String[] words = companyName.split("\\s+");
+        StringBuilder abbreviationBuilder = new StringBuilder();
 
-        if (company == null) {
-            log.warn("[getCompanyIdBySlug] company not found slug={}", slug);
-            throw new ResourceNotFoundException("Company with slug '" + slug + "' not found");
+        for (String word : words) {
+            if (!word.isEmpty()) {
+                abbreviationBuilder.append(Character.toUpperCase(word.charAt(0)));
+            }
         }
 
-        return company.getCompanyId();
-    }
-
-    @Override
-    public String getCompanyRequestName(Long requestId) {
-        return companyRequestRepository.findById(requestId)
-                .map(CompanyRequest::getCompanyName)
-                .orElse("Unknown");
-    }
-
-    @Override
-    public CursorPageResponse<CompanyOptionsResponse> getCompaniesBySubCategoryId(Long subCategoryId, Long cursor, int limit) {
-        Pageable pageable = PageRequest.of(0, limit + 1);
-        List<CompanyOptionsResponse> companies = companyRepository.findCompaniesBySubCategoryIdFromCursor(subCategoryId, cursor, pageable);
-        return buildCompanyOptionsCursorPage(companies, cursor, limit);
-    }
-
-    @Override
-    public CursorPageResponse<CompanyOptionsResponse> getCompaniesBySubCategoryIdViaProfile(Long subCategoryId, Long cursor, int limit) {
-        Pageable pageable = PageRequest.of(0, limit + 1);
-        List<CompanyOptionsResponse> companies = companyRepository.findCompaniesBySubCategoryIdViaProfileFromCursor(subCategoryId, cursor, pageable);
-        return buildCompanyOptionsCursorPage(companies, cursor, limit);
-    }
-
-    @Override
-    public CursorPageResponse<CompanyOptionsResponse> getCompaniesBySubCategoryNameViaProfile(String subCategoryName, Long cursor, int limit) {
-        Pageable pageable = PageRequest.of(0, limit + 1);
-        List<CompanyOptionsResponse> companies = companyRepository.findCompaniesBySubCategoryNameViaProfileFromCursor(subCategoryName, cursor, pageable);
-        return buildCompanyOptionsCursorPage(companies, cursor, limit);
+        return abbreviationBuilder.toString();
     }
 
     private CursorPageResponse<CompanyOptionsResponse> buildCompanyOptionsCursorPage(
@@ -402,102 +497,6 @@ public class CompanyService implements ICompanyService {
                         .size(items.size())
                         .hasMore(hasMore)
                         .build())
-                .build();
-    }
-
-    @Override
-    public CompanyOptionsResponse getCompanyBySlug(String slug) {
-        log.info("[getCompanyBySlug] slug={}", slug);
-        Company company = companyRepository.findByCompanySlug(slug);
-
-        if (company == null) {
-            log.warn("[getCompanyBySlug] company not found slug={}", slug);
-            throw new BadRequestExceptions("Company not found");
-        }
-
-        CompanyProfile profile = companyProfileRepository.findByCompanyId(company.getCompanyId());
-
-        if (profile == null) {
-            log.warn("[getCompanyBySlug] profile not found companyId={}", company.getCompanyId());
-            throw new BadRequestExceptions("Company profile not found");
-        }
-
-        CompanyEnrichmentData enrichment = fetchEnrichmentData(Collections.singletonList(company.getCompanyId()));
-
-        String subcategoryName = profile.getSubcategoryId() != null
-                ? enrichment.subcategoryNameMap.get(profile.getSubcategoryId())
-                : null;
-
-        return CompanyOptionsResponse.builder()
-                .companyId(company.getCompanyId())
-                .companyName(company.getCompanyName())
-                .companyAbbreviation(company.getCompanyAbbreviation())
-                .website(profile.getWebsite())
-                .bio(profile.getBio())
-                .isPartner(profile.getIsPartner())
-                .subcategoryName(subcategoryName)
-                .companySlug(company.getCompanySlug())
-                .rating(enrichment.ratingMap.get(company.getCompanyId()))
-                .totalReviews(enrichment.reviewCountMap.getOrDefault(company.getCompanyId(), 0L))
-                .build();
-    }
-
-    private String generateAbbreviation(String companyName) {
-        String[] words = companyName.split("\\s+");
-        StringBuilder abbreviationBuilder = new StringBuilder();
-
-        for (String word : words) {
-            if (!word.isEmpty()) {
-                abbreviationBuilder.append(Character.toUpperCase(word.charAt(0)));
-            }
-        }
-
-        return abbreviationBuilder.toString();
-    }
-
-    @Override
-    public Boolean isCompanyRequestOwner(Long requestId, Long userId) {
-        if (requestId == null || userId == null) return false;
-        return companyRequestRepository.findById(requestId)
-                .map(req -> req.getCreatedBy().equals(userId))
-                .orElse(false);
-    }
-
-    private CompanyOptionsResponse toOptionsResponse(Company company, CompanyEnrichmentData enrichment) {
-        CompanyProfile profile = enrichment.profileMap.get(company.getCompanyId());
-        String subcategoryName = (profile != null && profile.getSubcategoryId() != null)
-                ? enrichment.subcategoryNameMap.get(profile.getSubcategoryId())
-                : null;
-
-        Long totalReviews = enrichment.reviewCountMap.getOrDefault(company.getCompanyId(), 0L);
-
-        return CompanyOptionsResponse.builder()
-                .companyId(company.getCompanyId())
-                .companyName(company.getCompanyName())
-                .companyAbbreviation(company.getCompanyAbbreviation())
-                .website(profile != null ? profile.getWebsite() : null)
-                .isPartner(profile != null ? profile.getIsPartner() : null)
-                .subcategoryName(subcategoryName)
-                .companySlug(company.getCompanySlug())
-                .rating(enrichment.ratingMap.get(company.getCompanyId()))
-                .totalReviews(totalReviews)
-                .build();
-    }
-
-    private CompanyRequestResponse toRequestResponse(CompanyRequest companyRequest) {
-        return CompanyRequestResponse.builder()
-                .companyRequestId(companyRequest.getCompanyRequestId())
-                .companyName(companyRequest.getCompanyName())
-                .companyAbbreviation(companyRequest.getCompanyAbbreviation())
-                .website(companyRequest.getWebsite())
-                .isPartner(companyRequest.getIsPartner())
-                .subcategoryId(companyRequest.getSubcategoryId())
-                .status(companyRequest.getStatus())
-                .createdAt(companyRequest.getCreatedAt())
-                .createdBy(resolveUserName(companyRequest.getCreatedBy()))
-                .reviewedAt(companyRequest.getReviewedAt())
-                .reviewedBy(resolveUserName(companyRequest.getReviewedBy()))
-                .reviewNote(companyRequest.getReviewNote())
                 .build();
     }
 

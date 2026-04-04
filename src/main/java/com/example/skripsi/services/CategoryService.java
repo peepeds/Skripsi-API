@@ -54,26 +54,6 @@ public class CategoryService implements ICategoryService {
         return categories.stream().map(category -> toResponse(category, includeSubCategories)).collect(Collectors.toList());
     }
 
-    public CategoryResponse toResponse(Category category, boolean includeSubCategories) {
-        List<SubCategoryResponse> subCategoryResponses = null;
-
-        if (includeSubCategories && category.getSubCategories() != null) {
-            subCategoryResponses = category.getSubCategories().stream()
-                    .map(sub -> SubCategoryResponse.builder()
-                            .subCategoryId(sub.getSubCategoryId())
-                            .subCategoryName(sub.getSubCategoryName())
-                            .build())
-                    .collect(Collectors.toList());
-        }
-
-        return CategoryResponse.builder()
-                .categoryId(category.getCategoryId())
-                .categoryName(category.getCategoryName())
-                .categoryType(category.getCategoryType())
-                .subCategories(subCategoryResponses)
-                .build();
-    }
-
     public CursorPageResponse<CompanyOptionsResponse> getCompaniesBySubCategory(Long subCategoryId, Long cursor, int limit) {
         return companyService.getCompaniesBySubCategoryId(subCategoryId, cursor, limit);
     }
@@ -118,6 +98,26 @@ public class CategoryService implements ICategoryService {
                         SubCategory::getSubCategoryId,
                         SubCategory::getSubCategoryName
                 ));
+    }
+
+    public CategoryResponse toResponse(Category category, boolean includeSubCategories) {
+        List<SubCategoryResponse> subCategoryResponses = null;
+
+        if (includeSubCategories && category.getSubCategories() != null) {
+            subCategoryResponses = category.getSubCategories().stream()
+                    .map(sub -> SubCategoryResponse.builder()
+                            .subCategoryId(sub.getSubCategoryId())
+                            .subCategoryName(sub.getSubCategoryName())
+                            .build())
+                    .collect(Collectors.toList());
+        }
+
+        return CategoryResponse.builder()
+                .categoryId(category.getCategoryId())
+                .categoryName(category.getCategoryName())
+                .categoryType(category.getCategoryType())
+                .subCategories(subCategoryResponses)
+                .build();
     }
 
     private CursorPageResponse<CompanyOptionsResponse> emptyCursorPageResponse() {

@@ -38,7 +38,7 @@ public class ReviewController {
 
     @PostMapping("/{slug}")
     public WebResponse<?> submitReview(@PathVariable String slug, @Valid @RequestBody CreateReviewRequest request) {
-        var result = reviewService.submitReview(slug, request);
+        var result = reviewService.createReviewBySlug(slug, request);
         return WebResponse.builder()
                 .success(true)
                 .message("Review submitted successfully")

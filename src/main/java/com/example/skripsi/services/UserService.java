@@ -296,42 +296,6 @@ public class UserService implements IUserService {
                 .orElse(false);
     }
 
-    private String buildMinioProxyUrl(String certificatesUrl) {
-        return minioConfig.getProxyEndpoint() + "/" + certificatesUrl;
-    }
-
-    private UserResponse toUserResponse(UserProfile userProfile) {
-        User user = userProfile.getUser();
-        var roleName = user.getRoles().stream()
-                .findFirst()
-                .map(Role::getRoleName)
-                .orElse("USER")
-                .toLowerCase();
-
-        var major = userProfile.getMajor();
-        var regionName = major != null && major.getRegion() != null ? major.getRegion().getRegionName() : null;
-        var deptName = major != null && major.getDepartment() != null ? major.getDepartment().getDeptName() : null;
-
-        var certificateEntities = userCertificatesRepository.findByUserProfile_UserProfileId(userProfile.getUserProfileId());
-        var certificate = certificateEntities.stream()
-                .map(cert -> CertificateUrlResponse.builder()
-                        .url(buildMinioProxyUrl(cert.getCertificatesUrl()))
-                        .build())
-                .toList();
-
-        return UserResponse.builder()
-                .firstName(user.getFirstName())
-                .lastName(user.getLastName())
-                .email(user.getEmail())
-                .phoneNumber(userProfile.getPhoneNumber())
-                .role(roleName)
-                .regionName(regionName)
-                .deptName(deptName)
-                .majorName(major != null ? major.getMajorName() : null)
-                .certificate(certificate)
-                .build();
-    }
-
     private UserResponse toResponse(User user, UserProfile profile) {
         var roleName = user.getRoles().stream()
                 .findFirst()
@@ -373,6 +337,42 @@ public class UserService implements IUserService {
                 .majorName(majorName)
                 .role(roleName)
                 .build();
+    }
+
+    private UserResponse toUserResponse(UserProfile userProfile) {
+        User user = userProfile.getUser();
+        var roleName = user.getRoles().stream()
+                .findFirst()
+                .map(Role::getRoleName)
+                .orElse("USER")
+                .toLowerCase();
+
+        var major = userProfile.getMajor();
+        var regionName = major != null && major.getRegion() != null ? major.getRegion().getRegionName() : null;
+        var deptName = major != null && major.getDepartment() != null ? major.getDepartment().getDeptName() : null;
+
+        var certificateEntities = userCertificatesRepository.findByUserProfile_UserProfileId(userProfile.getUserProfileId());
+        var certificate = certificateEntities.stream()
+                .map(cert -> CertificateUrlResponse.builder()
+                        .url(buildMinioProxyUrl(cert.getCertificatesUrl()))
+                        .build())
+                .toList();
+
+        return UserResponse.builder()
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .email(user.getEmail())
+                .phoneNumber(userProfile.getPhoneNumber())
+                .role(roleName)
+                .regionName(regionName)
+                .deptName(deptName)
+                .majorName(major != null ? major.getMajorName() : null)
+                .certificate(certificate)
+                .build();
+    }
+
+    private String buildMinioProxyUrl(String certificatesUrl) {
+        return minioConfig.getProxyEndpoint() + "/" + certificatesUrl;
     }
 
     private CertificateResponse toCertificateResponse(String issuer, String url) {
