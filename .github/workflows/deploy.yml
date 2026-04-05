@@ -6,7 +6,7 @@ on:
       - main
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
 
     steps:
@@ -27,7 +27,11 @@ jobs:
           docker build -t ${{ secrets.DOCKER_USERNAME }}/internview-api:latest .
           docker push ${{ secrets.DOCKER_USERNAME }}/internview-api:latest
 
-      # 4. Deploy via docker-compose di VPS
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build   
+
+    steps:
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -37,5 +41,4 @@ jobs:
           script: |
             cd ~/api
             docker compose pull
-            docker compose down
             docker compose up -d
