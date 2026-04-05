@@ -39,4 +39,14 @@ public class CategoryController {
                 .meta(result.getMeta())
                 .build();
     }
+
+    @GetMapping("/top-categories")
+    public WebResponse<?> getTopCategories() {
+        var result = categoryService.getTopSubCategories();
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully Get Top Categories data")
+                .result(result)
+                .build();
+    }
 }

@@ -14,5 +14,15 @@ public interface SubCategoryRepository extends JpaRepository<SubCategory, Long> 
 
     @Query("SELECT sc FROM SubCategory sc JOIN FETCH sc.category WHERE sc.subCategoryId IN :subCategoryIds")
     List<SubCategory> findBySubCategoryIds(@Param("subCategoryIds") List<Long> subCategoryIds);
+
+    @Query(value = """
+            SELECT sc.sub_category_name
+            FROM internship_job_subcategories ijsc
+            JOIN sub_categories sc ON sc.sub_category_id = ijsc.sub_category_id
+            GROUP BY ijsc.sub_category_id, sc.sub_category_name
+            ORDER BY COUNT(*) DESC
+            LIMIT 10
+            """, nativeQuery = true)
+    List<String> findTop10SubCategoryNames();
 }
 

@@ -1,7 +1,6 @@
 package com.example.skripsi.interfaces;
 
 import com.example.skripsi.models.auth.*;
-import com.example.skripsi.models.user.*;
 
 public interface IAuthService {
     void register(Register register);

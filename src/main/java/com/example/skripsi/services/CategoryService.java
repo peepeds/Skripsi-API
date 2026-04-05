@@ -10,6 +10,8 @@ import com.example.skripsi.repositories.*;
 import com.example.skripsi.interfaces.*;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -98,6 +100,16 @@ public class CategoryService implements ICategoryService {
                         SubCategory::getSubCategoryId,
                         SubCategory::getSubCategoryName
                 ));
+    }
+
+    @Override
+    public List<TopSubCategoryResponse> getTopSubCategories() {
+        return subCategoryRepository.findTop10SubCategoryNames().stream()
+                .map(name -> TopSubCategoryResponse.builder()
+                        .subcategoryName(name)
+                        .url("/" + URLEncoder.encode(name, StandardCharsets.UTF_8).replace("+", "%20") + "/companies")
+                        .build())
+                .collect(Collectors.toList());
     }
 
     public CategoryResponse toResponse(Category category, boolean includeSubCategories) {
