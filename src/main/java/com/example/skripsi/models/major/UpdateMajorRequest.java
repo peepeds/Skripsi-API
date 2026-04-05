@@ -1,6 +1,5 @@
 package com.example.skripsi.models.major;
 
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

@@ -146,13 +146,6 @@ public class AuthService implements IAuthService {
         return toAuthResponse(accessToken, refreshToken);
     }
 
-    private AuthResponse toAuthResponse(String accessToken, String refreshToken) {
-        return AuthResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshToken)
-                .build();
-    }
-
     @Override
     public AuthResponse refresh(String refreshToken) {
         String jti = jwtUtils.getJti(refreshToken);
@@ -193,5 +186,12 @@ public class AuthService implements IAuthService {
         tokenRecord.setRevoked(true);
         userTokenRepository.save(tokenRecord);
         log.info("[logout] success userId={}", tokenRecord.getUser().getUserId());
+    }
+
+    private AuthResponse toAuthResponse(String accessToken, String refreshToken) {
+        return AuthResponse.builder()
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .build();
     }
 }

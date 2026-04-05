@@ -27,4 +27,7 @@ public interface InternshipHeaderRepository extends JpaRepository<InternshipHead
 
     @Query("SELECT ih FROM InternshipHeader ih WHERE ih.companyId = :companyId AND (:cursor IS NULL OR ih.internshipHeaderId > :cursor) ORDER BY ih.internshipHeaderId ASC")
     List<InternshipHeader> findPageByCompanyIdAsc(@Param("companyId") Long companyId, @Param("cursor") Long cursor, Pageable pageable);
+
+    @Query("SELECT ih FROM InternshipHeader ih WHERE ih.userId = :userId AND YEAR(ih.startYear) = :year")
+    List<InternshipHeader> findByUserIdAndYear(@Param("userId") Long userId, @Param("year") Integer year);
 }

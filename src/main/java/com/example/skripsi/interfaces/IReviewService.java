@@ -14,8 +14,8 @@ import java.util.List;
 import java.util.Map;
 
 public interface IReviewService {
-    ReviewResponse submitReview(Long companyId, CreateReviewRequest request, Long userId);
-    ReviewResponse submitReview(String slug, CreateReviewRequest request);
+    ReviewResponse createReview(Long companyId, CreateReviewRequest request, Long userId);
+    ReviewResponse createReviewBySlug(String slug, CreateReviewRequest request);
     List<JobListItemResponse> searchJobOptions(String query);
     ReviewSummaryResponse getCompanySummary(String slug);
     CursorPageResponse<CompanyReviewsResponse.ReviewItem> getCompanyReviews(String slug, String order, Long cursor, int limit);

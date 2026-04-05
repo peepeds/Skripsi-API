@@ -1,6 +1,5 @@
 package com.example.skripsi.models.department;
 
-import jakarta.persistence.Column;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

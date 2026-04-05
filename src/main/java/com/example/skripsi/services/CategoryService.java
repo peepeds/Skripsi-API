@@ -10,6 +10,8 @@ import com.example.skripsi.repositories.*;
 import com.example.skripsi.interfaces.*;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -52,26 +54,6 @@ public class CategoryService implements ICategoryService {
     public List<CategoryResponse> getCategoryResponse(boolean includeSubCategories, String categoryType) {
         List<Category> categories = getCategories(includeSubCategories, categoryType);
         return categories.stream().map(category -> toResponse(category, includeSubCategories)).collect(Collectors.toList());
-    }
-
-    public CategoryResponse toResponse(Category category, boolean includeSubCategories) {
-        List<SubCategoryResponse> subCategoryResponses = null;
-
-        if (includeSubCategories && category.getSubCategories() != null) {
-            subCategoryResponses = category.getSubCategories().stream()
-                    .map(sub -> SubCategoryResponse.builder()
-                            .subCategoryId(sub.getSubCategoryId())
-                            .subCategoryName(sub.getSubCategoryName())
-                            .build())
-                    .collect(Collectors.toList());
-        }
-
-        return CategoryResponse.builder()
-                .categoryId(category.getCategoryId())
-                .categoryName(category.getCategoryName())
-                .categoryType(category.getCategoryType())
-                .subCategories(subCategoryResponses)
-                .build();
     }
 
     public CursorPageResponse<CompanyOptionsResponse> getCompaniesBySubCategory(Long subCategoryId, Long cursor, int limit) {
@@ -118,6 +100,36 @@ public class CategoryService implements ICategoryService {
                         SubCategory::getSubCategoryId,
                         SubCategory::getSubCategoryName
                 ));
+    }
+
+    @Override
+    public List<TopSubCategoryResponse> getTopSubCategories() {
+        return subCategoryRepository.findTop10SubCategoryNames().stream()
+                .map(name -> TopSubCategoryResponse.builder()
+                        .subcategoryName(name)
+                        .url("/" + URLEncoder.encode(name, StandardCharsets.UTF_8).replace("+", "%20") + "/companies")
+                        .build())
+                .collect(Collectors.toList());
+    }
+
+    public CategoryResponse toResponse(Category category, boolean includeSubCategories) {
+        List<SubCategoryResponse> subCategoryResponses = null;
+
+        if (includeSubCategories && category.getSubCategories() != null) {
+            subCategoryResponses = category.getSubCategories().stream()
+                    .map(sub -> SubCategoryResponse.builder()
+                            .subCategoryId(sub.getSubCategoryId())
+                            .subCategoryName(sub.getSubCategoryName())
+                            .build())
+                    .collect(Collectors.toList());
+        }
+
+        return CategoryResponse.builder()
+                .categoryId(category.getCategoryId())
+                .categoryName(category.getCategoryName())
+                .categoryType(category.getCategoryType())
+                .subCategories(subCategoryResponses)
+                .build();
     }
 
     private CursorPageResponse<CompanyOptionsResponse> emptyCursorPageResponse() {

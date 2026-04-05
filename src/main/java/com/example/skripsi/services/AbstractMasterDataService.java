@@ -43,6 +43,43 @@ public abstract class AbstractMasterDataService<Entity, Response, CreateRequest,
                 .collect(Collectors.toList());
     }
 
+    public Response create(CreateRequest request) {
+        Long userId = securityUtils.getCurrentUserId();
+
+        validateBeforeCreate(request);
+
+        Entity entity = buildEntity(request, userId);
+        Entity savedEntity = repository.save(entity);
+
+        return toResponse(savedEntity, new HashMap<>());
+    }
+
+    public Response update(Integer id, UpdateRequest request) {
+        Long userId = securityUtils.getCurrentUserId();
+
+        Entity entity = repository.findById(id)
+                .orElseThrow(() -> new BadRequestExceptions(getNotFoundErrorMessage()));
+
+        updateEntityFields(entity, request);
+        entity = setUpdateAuditFields(entity, userId);
+
+        Entity savedEntity = repository.save(entity);
+
+        return toResponse(savedEntity, new HashMap<>());
+    }
+
+    protected abstract void validateBeforeCreate(CreateRequest request);
+
+    protected abstract Entity buildEntity(CreateRequest request, Long userId);
+
+    protected abstract void updateEntityFields(Entity entity, UpdateRequest request);
+
+    protected abstract Entity setUpdateAuditFields(Entity entity, Long userId);
+
+    protected abstract Response toResponse(Entity entity, Map<Long, String> userNameMap);
+
+    protected abstract String getNotFoundErrorMessage();
+
     protected List<Long> extractUserIds(List<Entity> entities) {
         return entities.stream()
                 .flatMap(entity -> {
@@ -70,31 +107,6 @@ public abstract class AbstractMasterDataService<Entity, Response, CreateRequest,
         }
     }
 
-    public Response create(CreateRequest request) {
-        Long userId = securityUtils.getCurrentUserId();
-
-        validateBeforeCreate(request);
-
-        Entity entity = buildEntity(request, userId);
-        Entity savedEntity = repository.save(entity);
-
-        return toResponse(savedEntity, new HashMap<>());
-    }
-
-    public Response update(Integer id, UpdateRequest request) {
-        Long userId = securityUtils.getCurrentUserId();
-
-        Entity entity = repository.findById(id)
-                .orElseThrow(() -> new BadRequestExceptions(getNotFoundErrorMessage()));
-
-        updateEntityFields(entity, request);
-        entity = setUpdateAuditFields(entity, userId);
-
-        Entity savedEntity = repository.save(entity);
-
-        return toResponse(savedEntity, new HashMap<>());
-    }
-
     protected String resolveUsername(Long userId, Map<Long, String> userNameMap) {
         if (userId == null) {
             return null;
@@ -102,16 +114,4 @@ public abstract class AbstractMasterDataService<Entity, Response, CreateRequest,
 
         return userNameMap.get(userId);
     }
-
-    protected abstract void validateBeforeCreate(CreateRequest request);
-
-    protected abstract Entity buildEntity(CreateRequest request, Long userId);
-
-    protected abstract void updateEntityFields(Entity entity, UpdateRequest request);
-
-    protected abstract Entity setUpdateAuditFields(Entity entity, Long userId);
-
-    protected abstract Response toResponse(Entity entity, Map<Long, String> userNameMap);
-
-    protected abstract String getNotFoundErrorMessage();
 }
