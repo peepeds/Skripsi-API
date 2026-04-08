@@ -79,11 +79,7 @@ public class CategoryService implements ICategoryService {
 
             SubCategory sub = subCategory.get();
 
-            if (sub.getCategory() == null || !"jobs".equalsIgnoreCase(sub.getCategory().getCategoryType())) {
-                return emptyCursorPageResponse();
-            }
-
-            return companyService.getCompaniesBySubCategoryIdViaProfile(sub.getSubCategoryId(), cursor, limit);
+            return companyService.getCompaniesBySubCategoryId(sub.getSubCategoryId(), cursor, limit);
         }
     }
 
@@ -105,9 +101,10 @@ public class CategoryService implements ICategoryService {
     @Override
     public List<TopSubCategoryResponse> getTopSubCategories() {
         return subCategoryRepository.findTop10SubCategoryNames().stream()
-                .map(name -> TopSubCategoryResponse.builder()
-                        .subcategoryName(name)
-                        .url("/" + URLEncoder.encode(name, StandardCharsets.UTF_8).replace("+", "%20") + "/companies")
+                .map(projection -> TopSubCategoryResponse.builder()
+                        .subcategoryName(projection.getSubCategoryName())
+                        .url("/" + URLEncoder.encode(projection.getSubCategoryName(), StandardCharsets.UTF_8).replace("+", "%20") + "/companies")
+                        .totalReviews(projection.getTotalReviews())
                         .build())
                 .collect(Collectors.toList());
     }

@@ -126,7 +126,9 @@ public class CompanyService implements ICompanyService {
                 .companyName(companyName)
                 .companyAbbreviation(abbreviation)
                 .website(request.getWebsite())
+                .bio(request.getBio())
                 .isPartner(request.getIsPartner())
+                .subcategoryId(request.getSubcategoryId())
                 .status(CompanyRequestStatus.PENDING)
                 .createdAt(OffsetDateTime.now())
                 .createdBy(userId)
@@ -396,13 +398,19 @@ public class CompanyService implements ICompanyService {
     }
 
     private CompanyRequestResponse toRequestResponse(CompanyRequest companyRequest) {
+        String subcategoryName = null;
+        if (companyRequest.getSubcategoryId() != null) {
+            Map<Long, String> nameMap = categoryService.getSubCategoryNameMap(List.of(companyRequest.getSubcategoryId()));
+            subcategoryName = nameMap.get(companyRequest.getSubcategoryId());
+        }
         return CompanyRequestResponse.builder()
                 .companyRequestId(companyRequest.getCompanyRequestId())
                 .companyName(companyRequest.getCompanyName())
                 .companyAbbreviation(companyRequest.getCompanyAbbreviation())
                 .website(companyRequest.getWebsite())
+                .bio(companyRequest.getBio())
                 .isPartner(companyRequest.getIsPartner())
-                .subcategoryId(companyRequest.getSubcategoryId())
+                .subcategoryName(subcategoryName)
                 .status(companyRequest.getStatus())
                 .createdAt(companyRequest.getCreatedAt())
                 .createdBy(resolveUserName(companyRequest.getCreatedBy()))
@@ -429,7 +437,7 @@ public class CompanyService implements ICompanyService {
         companyProfileRepository.save(CompanyProfile.builder()
                 .companyId(savedCompany.getCompanyId())
                 .website(companyRequest.getWebsite())
-                .bio("")
+                .bio(companyRequest.getBio())
                 .isPartner(false)
                 .subcategoryId(companyRequest.getSubcategoryId())
                 .createdAt(OffsetDateTime.now())
@@ -521,6 +529,7 @@ public class CompanyService implements ICompanyService {
                         .companyName(companyRequest.getCompanyName())
                         .companyAbbreviation(companyRequest.getCompanyAbbreviation())
                         .website(companyRequest.getWebsite())
+                        .bio(companyRequest.getBio())
                         .subcategoryId(companyRequest.getSubcategoryId())
                         .submittedBy(submittedBy)
                         .submittedAt(companyRequest.getCreatedAt())

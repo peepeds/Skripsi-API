@@ -8,4 +8,5 @@ import lombok.Data;
 public class TopSubCategoryResponse {
     private String subcategoryName;
     private String url;
+    private Long totalReviews;
 }

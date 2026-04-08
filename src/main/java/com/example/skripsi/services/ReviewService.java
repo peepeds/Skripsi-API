@@ -462,7 +462,7 @@ public class ReviewService implements IReviewService {
     }
 
     private void validateLookupExists(String lookupCode, String lookupValue) {
-        var lookup = lookupRepository.findByLookupTypeAndLookupCode(LOOKUP_TYPE_INTERNSHIP_REVIEW, lookupCode);
+        var lookup = lookupRepository.findFirstByLookupTypeAndLookupCode(LOOKUP_TYPE_INTERNSHIP_REVIEW, lookupCode);
         
         if (lookup.isEmpty()) {
             throw new ValidationException(String.format("Invalid lookup code: %s", lookupCode));
@@ -475,9 +475,9 @@ public class ReviewService implements IReviewService {
         }
         
         Set<Long> providedIds = new HashSet<>(recruitmentStepIds);
-        List<Lookup> validSteps = lookupRepository.findByLookupType(LOOKUP_CODE_RECRUITMENT_STEPS);
+        List<Lookup> validSteps = lookupRepository.findAllByLookupTypeAndLookupCode(LOOKUP_TYPE_INTERNSHIP_REVIEW, LOOKUP_CODE_RECRUITMENT_STEPS);
         Set<Long> validIds = validSteps.stream()
-                .map(step -> Long.parseLong(step.getLookupCode()))
+                .map(step -> Long.parseLong(step.getLookupValue()))
                 .collect(Collectors.toSet());
         
         Set<Long> invalidIds = providedIds.stream()

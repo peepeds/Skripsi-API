@@ -53,6 +53,6 @@ public class LookupService implements ILookupService {
     }
 
     public Optional<Lookup> getLookupByTypeAndCode(String lookupType, String lookupCode) {
-        return lookupRepository.findByLookupTypeAndLookupCode(lookupType, lookupCode);
+        return lookupRepository.findFirstByLookupTypeAndLookupCode(lookupType, lookupCode);
     }
 }
