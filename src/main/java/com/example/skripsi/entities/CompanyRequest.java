@@ -27,6 +27,9 @@ public class CompanyRequest {
     @Column(name = "website")
     private String website;
 
+    @Column(name = "bio", columnDefinition = "TEXT")
+    private String bio;
+
     @Column(name = "is_partner")
     private Boolean isPartner;
 

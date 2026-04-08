@@ -17,8 +17,9 @@ public class CompanyRequestResponse {
     private String companyName;
     private String companyAbbreviation;
     private String website;
+    private String bio;
     private Boolean isPartner;
-    private Long subcategoryId;
+    private String subcategoryName;
     private CompanyRequestStatus status;
     private OffsetDateTime createdAt;
     private String createdBy;

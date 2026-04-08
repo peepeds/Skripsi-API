@@ -27,6 +27,7 @@ public class CompanyRequestDetailResponse {
         private String companyName;
         private String companyAbbreviation;
         private String website;
+        private String bio;
         private Long subcategoryId;
         private String submittedBy;
         private OffsetDateTime submittedAt;

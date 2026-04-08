@@ -1,6 +1,7 @@
 package com.example.skripsi.repositories;
 
 import com.example.skripsi.entities.*;
+import com.example.skripsi.repositories.projections.TopSubCategoryProjection;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,13 +17,13 @@ public interface SubCategoryRepository extends JpaRepository<SubCategory, Long> 
     List<SubCategory> findBySubCategoryIds(@Param("subCategoryIds") List<Long> subCategoryIds);
 
     @Query(value = """
-            SELECT sc.sub_category_name
+            SELECT sc.sub_category_name AS subCategoryName, COUNT(*) AS totalReviews
             FROM internship_job_subcategories ijsc
             JOIN sub_categories sc ON sc.sub_category_id = ijsc.sub_category_id
             GROUP BY ijsc.sub_category_id, sc.sub_category_name
             ORDER BY COUNT(*) DESC
             LIMIT 10
             """, nativeQuery = true)
-    List<String> findTop10SubCategoryNames();
+    List<TopSubCategoryProjection> findTop10SubCategoryNames();
 }
 

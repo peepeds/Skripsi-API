@@ -10,5 +10,6 @@ import java.util.Optional;
 @Repository
 public interface LookupRepository extends JpaRepository<Lookup, Long> {
     List<Lookup> findByLookupType(String lookupType);
-    Optional<Lookup> findByLookupTypeAndLookupCode(String lookupType, String lookupCode);
+    List<Lookup> findAllByLookupTypeAndLookupCode(String lookupType, String lookupCode);
+    Optional<Lookup> findFirstByLookupTypeAndLookupCode(String lookupType, String lookupCode);
 }
