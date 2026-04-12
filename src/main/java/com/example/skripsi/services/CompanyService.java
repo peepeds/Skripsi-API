@@ -32,6 +32,7 @@ public class CompanyService implements ICompanyService {
     private final CompanyRepository companyRepository;
     private final CompanyRequestRepository companyRequestRepository;
     private final CompanyProfileRepository companyProfileRepository;
+    private final CompanySaveRepository companySaveRepository;
     private final AuditService auditService;
     private final SecurityUtils securityUtils;
     private final IUserService userService;
@@ -45,6 +46,7 @@ public class CompanyService implements ICompanyService {
                           SecurityUtils securityUtils,
                           IUserService userService,
                           CompanyProfileRepository companyProfileRepository,
+                          CompanySaveRepository companySaveRepository,
                           @Lazy ICategoryService categoryService,
                           @Lazy IReviewService reviewService,
                           NotificationHelper notificationHelper) {
@@ -54,6 +56,7 @@ public class CompanyService implements ICompanyService {
         this.securityUtils = securityUtils;
         this.userService = userService;
         this.companyProfileRepository = companyProfileRepository;
+        this.companySaveRepository = companySaveRepository;
         this.categoryService = categoryService;
         this.reviewService = reviewService;
         this.notificationHelper = notificationHelper;
@@ -316,30 +319,50 @@ public class CompanyService implements ICompanyService {
             throw new BadRequestExceptions("Company not found");
         }
 
-        CompanyProfile profile = companyProfileRepository.findByCompanyId(company.getCompanyId());
+        CompanyEnrichmentData enrichment = fetchEnrichmentData(Collections.singletonList(company.getCompanyId()));
 
-        if (profile == null) {
+        if (enrichment.profileMap.get(company.getCompanyId()) == null) {
             log.warn("[getCompanyBySlug] profile not found companyId={}", company.getCompanyId());
             throw new BadRequestExceptions("Company profile not found");
         }
 
-        CompanyEnrichmentData enrichment = fetchEnrichmentData(Collections.singletonList(company.getCompanyId()));
+        return toOptionsResponse(company, enrichment);
+    }
 
-        String subcategoryName = profile.getSubcategoryId() != null
-                ? enrichment.subcategoryNameMap.get(profile.getSubcategoryId())
+    @Override
+    public CursorPageResponse<CompanyOptionsResponse> getMyBookmarks(Long cursor, int limit) {
+        Long userId = securityUtils.getCurrentUserId();
+
+        Pageable pageable = PageRequest.of(0, limit + 1);
+        List<CompanySave> saves = companySaveRepository.findBookmarksByUserIdFromCursor(userId, cursor, pageable);
+
+        boolean hasMore = saves.size() > limit;
+        List<CompanySave> page = hasMore ? saves.subList(0, limit) : saves;
+
+        List<Long> companyIds = page.stream().map(CompanySave::getCompanyId).collect(Collectors.toList());
+        List<Company> companies = companyRepository.findAllById(companyIds);
+        Map<Long, Company> companyMap = companies.stream()
+                .collect(Collectors.toMap(Company::getCompanyId, c -> c));
+
+        CompanyEnrichmentData enrichment = fetchEnrichmentData(companyIds);
+
+        List<CompanyOptionsResponse> items = page.stream()
+                .filter(s -> companyMap.containsKey(s.getCompanyId()))
+                .map(s -> toOptionsResponse(companyMap.get(s.getCompanyId()), enrichment))
+                .collect(Collectors.toList());
+
+        Long nextCursor = hasMore && !page.isEmpty()
+                ? page.get(page.size() - 1).getCompanySaveId()
                 : null;
 
-        return CompanyOptionsResponse.builder()
-                .companyId(company.getCompanyId())
-                .companyName(company.getCompanyName())
-                .companyAbbreviation(company.getCompanyAbbreviation())
-                .website(profile.getWebsite())
-                .bio(profile.getBio())
-                .isPartner(profile.getIsPartner())
-                .subcategoryName(subcategoryName)
-                .companySlug(company.getCompanySlug())
-                .rating(enrichment.ratingMap.get(company.getCompanyId()))
-                .totalReviews(enrichment.reviewCountMap.getOrDefault(company.getCompanyId(), 0L))
+        return CursorPageResponse.<CompanyOptionsResponse>builder()
+                .result(items)
+                .meta(CursorPageResponse.Meta.builder()
+                        .nextCursor(nextCursor)
+                        .previousCursor(cursor)
+                        .size(items.size())
+                        .hasMore(hasMore)
+                        .build())
                 .build();
     }
 
@@ -349,6 +372,26 @@ public class CompanyService implements ICompanyService {
         return companyRequestRepository.findById(requestId)
                 .map(req -> req.getCreatedBy().equals(userId))
                 .orElse(false);
+    }
+
+    @Override
+    public Boolean saveCompany(String slug, SaveCompanyRequest request) {
+        Long userId = securityUtils.getCurrentUserId();
+        Long companyId = getCompanyIdBySlug(slug);
+        log.info("[saveCompany] userId={} companyId={} isSave={}", userId, companyId, request.getIsSave());
+
+        CompanySave save = companySaveRepository.findByUserIdAndCompanyId(userId, companyId)
+                .orElse(CompanySave.builder()
+                        .userId(userId)
+                        .companyId(companyId)
+                        .createdAt(OffsetDateTime.now())
+                        .build());
+
+        save.setIsSave(request.getIsSave());
+        save.setUpdatedAt(OffsetDateTime.now());
+        companySaveRepository.save(save);
+
+        return request.getIsSave();
     }
 
     private CompanyEnrichmentData fetchEnrichmentData(List<Long> companyIds) {
@@ -374,50 +417,6 @@ public class CompanyService implements ICompanyService {
         Map<Long, String> subcategoryNameMap = categoryService.getSubCategoryNameMap(subcategoryIds);
 
         return new CompanyEnrichmentData(ratingMap, reviewCountMap, profileMap, subcategoryNameMap);
-    }
-
-    private CompanyOptionsResponse toOptionsResponse(Company company, CompanyEnrichmentData enrichment) {
-        CompanyProfile profile = enrichment.profileMap.get(company.getCompanyId());
-        String subcategoryName = (profile != null && profile.getSubcategoryId() != null)
-                ? enrichment.subcategoryNameMap.get(profile.getSubcategoryId())
-                : null;
-
-        Long totalReviews = enrichment.reviewCountMap.getOrDefault(company.getCompanyId(), 0L);
-
-        return CompanyOptionsResponse.builder()
-                .companyId(company.getCompanyId())
-                .companyName(company.getCompanyName())
-                .companyAbbreviation(company.getCompanyAbbreviation())
-                .website(profile != null ? profile.getWebsite() : null)
-                .isPartner(profile != null ? profile.getIsPartner() : null)
-                .subcategoryName(subcategoryName)
-                .companySlug(company.getCompanySlug())
-                .rating(enrichment.ratingMap.get(company.getCompanyId()))
-                .totalReviews(totalReviews)
-                .build();
-    }
-
-    private CompanyRequestResponse toRequestResponse(CompanyRequest companyRequest) {
-        String subcategoryName = null;
-        if (companyRequest.getSubcategoryId() != null) {
-            Map<Long, String> nameMap = categoryService.getSubCategoryNameMap(List.of(companyRequest.getSubcategoryId()));
-            subcategoryName = nameMap.get(companyRequest.getSubcategoryId());
-        }
-        return CompanyRequestResponse.builder()
-                .companyRequestId(companyRequest.getCompanyRequestId())
-                .companyName(companyRequest.getCompanyName())
-                .companyAbbreviation(companyRequest.getCompanyAbbreviation())
-                .website(companyRequest.getWebsite())
-                .bio(companyRequest.getBio())
-                .isPartner(companyRequest.getIsPartner())
-                .subcategoryName(subcategoryName)
-                .status(companyRequest.getStatus())
-                .createdAt(companyRequest.getCreatedAt())
-                .createdBy(resolveUserName(companyRequest.getCreatedBy()))
-                .reviewedAt(companyRequest.getReviewedAt())
-                .reviewedBy(resolveUserName(companyRequest.getReviewedBy()))
-                .reviewNote(companyRequest.getReviewNote())
-                .build();
     }
 
     private void validateCompanyRequestNotFinalized(CompanyRequest companyRequest) {
@@ -505,6 +504,51 @@ public class CompanyService implements ICompanyService {
                         .size(items.size())
                         .hasMore(hasMore)
                         .build())
+                .build();
+    }
+
+    private CompanyOptionsResponse toOptionsResponse(Company company, CompanyEnrichmentData enrichment) {
+        CompanyProfile profile = enrichment.profileMap.get(company.getCompanyId());
+        String subcategoryName = (profile != null && profile.getSubcategoryId() != null)
+                ? enrichment.subcategoryNameMap.get(profile.getSubcategoryId())
+                : null;
+
+        Long totalReviews = enrichment.reviewCountMap.getOrDefault(company.getCompanyId(), 0L);
+
+        return CompanyOptionsResponse.builder()
+                .companyId(company.getCompanyId())
+                .companyName(company.getCompanyName())
+                .companyAbbreviation(company.getCompanyAbbreviation())
+                .website(profile != null ? profile.getWebsite() : null)
+                .bio(profile != null ? profile.getBio() : null)
+                .isPartner(profile != null ? profile.getIsPartner() : null)
+                .subcategoryName(subcategoryName)
+                .companySlug(company.getCompanySlug())
+                .rating(enrichment.ratingMap.get(company.getCompanyId()))
+                .totalReviews(totalReviews)
+                .build();
+    }
+
+    private CompanyRequestResponse toRequestResponse(CompanyRequest companyRequest) {
+        String subcategoryName = null;
+        if (companyRequest.getSubcategoryId() != null) {
+            Map<Long, String> nameMap = categoryService.getSubCategoryNameMap(List.of(companyRequest.getSubcategoryId()));
+            subcategoryName = nameMap.get(companyRequest.getSubcategoryId());
+        }
+        return CompanyRequestResponse.builder()
+                .companyRequestId(companyRequest.getCompanyRequestId())
+                .companyName(companyRequest.getCompanyName())
+                .companyAbbreviation(companyRequest.getCompanyAbbreviation())
+                .website(companyRequest.getWebsite())
+                .bio(companyRequest.getBio())
+                .isPartner(companyRequest.getIsPartner())
+                .subcategoryName(subcategoryName)
+                .status(companyRequest.getStatus())
+                .createdAt(companyRequest.getCreatedAt())
+                .createdBy(resolveUserName(companyRequest.getCreatedBy()))
+                .reviewedAt(companyRequest.getReviewedAt())
+                .reviewedBy(resolveUserName(companyRequest.getReviewedBy()))
+                .reviewNote(companyRequest.getReviewNote())
                 .build();
     }
 

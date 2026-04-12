@@ -109,4 +109,16 @@ public class CompanyController {
                 .result(result)
                 .build();
     }
+
+    @PostMapping("/{slug}/save")
+    @PreAuthorize("isAuthenticated()")
+    public WebResponse<?> saveCompany(@PathVariable String slug,
+                                      @Valid @RequestBody SaveCompanyRequest request) {
+        var result = companyService.saveCompany(slug, request);
+        return WebResponse.builder()
+                .success(true)
+                .message(MessageConstants.Success.SUCCESSFULLY_SAVE_COMPANY)
+                .result(result)
+                .build();
+    }
 }

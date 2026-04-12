@@ -1,6 +1,7 @@
 package com.example.skripsi.interfaces;
 
 import com.example.skripsi.models.review.CreateReviewRequest;
+import com.example.skripsi.models.review.LikeRequest;
 import com.example.skripsi.models.review.ReviewResponse;
 import com.example.skripsi.models.review.ReviewSummaryResponse;
 import com.example.skripsi.models.review.CompanyReviewsResponse;
@@ -28,4 +29,6 @@ public interface IReviewService {
     Map<Long, Long> getReviewCountsByCompanyIds(List<Long> companyIds);
 
     List<Long> getTop10CompanyIdsByRating();
+
+    void toggleLike(LikeRequest request);
 }

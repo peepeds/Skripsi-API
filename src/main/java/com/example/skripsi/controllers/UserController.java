@@ -1,5 +1,6 @@
 package com.example.skripsi.controllers;
 
+import com.example.skripsi.interfaces.ICompanyService;
 import com.example.skripsi.models.*;
 import com.example.skripsi.models.user.*;
 import com.example.skripsi.models.constant.*;
@@ -16,9 +17,11 @@ import java.util.Map;
 public class UserController {
 
     private final UserService userService;
+    private final ICompanyService companyService;
 
-    public UserController(UserService userService){
+    public UserController(UserService userService, ICompanyService companyService){
         this.userService = userService;
+        this.companyService = companyService;
     }
 
     @GetMapping("")
@@ -117,5 +120,19 @@ public class UserController {
                 .build();
     }
 
+    @GetMapping("/my-bookmarks")
+    @PreAuthorize("isAuthenticated()")
+    public WebResponse<?> getMyBookmarks(
+            @RequestParam(value = "cursor", required = false) Long cursor,
+            @RequestParam(value = "limit", defaultValue = "10") int limit) {
+        var results = companyService.getMyBookmarks(cursor, limit);
+
+        return WebResponse.builder()
+                .success(true)
+                .message(MessageConstants.Success.SUCCESSFULLY_GET_BOOKMARKS)
+                .meta(results.getMeta())
+                .result(results.getResult())
+                .build();
+    }
 
 }

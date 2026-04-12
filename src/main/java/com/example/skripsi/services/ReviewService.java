@@ -54,6 +54,7 @@ public class ReviewService implements IReviewService {
     private final LookupRepository lookupRepository;
     private final IUserService userService;
     private final SubCategoryRepository subCategoryRepository;
+    private final ReviewLikeRepository reviewLikeRepository;
 
     public ReviewService(InternshipHeaderRepository internshipHeaderRepository,
                          InternshipDetailRepository internshipDetailRepository,
@@ -65,7 +66,8 @@ public class ReviewService implements IReviewService {
                          AuditService auditService,
                          LookupRepository lookupRepository,
                          IUserService userService,
-                         SubCategoryRepository subCategoryRepository) {
+                         SubCategoryRepository subCategoryRepository,
+                         ReviewLikeRepository reviewLikeRepository) {
         this.internshipHeaderRepository = internshipHeaderRepository;
         this.internshipDetailRepository = internshipDetailRepository;
         this.recruitmentStepRepository = recruitmentStepRepository;
@@ -77,6 +79,7 @@ public class ReviewService implements IReviewService {
         this.lookupRepository = lookupRepository;
         this.userService = userService;
         this.subCategoryRepository = subCategoryRepository;
+        this.reviewLikeRepository = reviewLikeRepository;
     }
 
     @Override
@@ -817,7 +820,14 @@ public class ReviewService implements IReviewService {
                 .collect(Collectors.toList());
         Map<Long, String> userNameMap = userService.getUserNameMap(userIds);
 
-        return new ReviewDataBundle(detailMap, subCategoriesMap, stepsMap, lookupDescMap, userNameMap);
+        Map<Long, Long> likeCountMap = reviewLikeRepository.countLikesByInternshipHeaderIds(headerIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        com.example.skripsi.repositories.projections.ReviewLikeCountProjection::getInternshipHeaderId,
+                        com.example.skripsi.repositories.projections.ReviewLikeCountProjection::getLikeCount
+                ));
+
+        return new ReviewDataBundle(detailMap, subCategoriesMap, stepsMap, lookupDescMap, userNameMap, likeCountMap);
     }
 
     private CompanyReviewsResponse.ReviewItem toReviewItem(InternshipHeader header, ReviewDataBundle data) {
@@ -871,6 +881,7 @@ public class ReviewService implements IReviewService {
                 .selectionProcess(detail != null ? detail.getSelectionProcess() : null)
                 .tipsTricks(detail != null ? detail.getTipsTricks() : null)
                 .createdAt(detail != null ? detail.getCreatedAt() : null)
+                .totalLikes(data.likeCountMap().getOrDefault(headerId, 0L))
                 .build();
     }
 
@@ -906,6 +917,7 @@ public class ReviewService implements IReviewService {
                 .selectionProcess(detail != null ? detail.getSelectionProcess() : null)
                 .tipsTricks(detail != null ? detail.getTipsTricks() : null)
                 .createdAt(detail != null ? detail.getCreatedAt() : null)
+                .totalLikes(data.likeCountMap().getOrDefault(headerId, 0L))
                 .build();
     }
 
@@ -933,6 +945,31 @@ public class ReviewService implements IReviewService {
             Map<Long, List<String>> subCategoriesMap,
             Map<Long, List<Integer>> stepsMap,
             Map<String, Map<String, String>> lookupDescMap,
-            Map<Long, String> userNameMap
+            Map<Long, String> userNameMap,
+            Map<Long, Long> likeCountMap
     ) {}
+
+    @Override
+    public void toggleLike(LikeRequest request) {
+        Long userId = securityUtils.getCurrentUserId();
+        Long internshipHeaderId = request.getInternshipHeaderId();
+
+        internshipHeaderRepository.findById(internshipHeaderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Internship review not found"));
+
+        ReviewLike like = reviewLikeRepository
+                .findByUserIdAndInternshipHeaderId(userId, internshipHeaderId)
+                .orElse(null);
+
+        if (like != null) {
+            like.setIsLike(request.getIsLike());
+            reviewLikeRepository.save(like);
+        } else {
+            reviewLikeRepository.save(ReviewLike.builder()
+                    .userId(userId)
+                    .internshipHeaderId(internshipHeaderId)
+                    .isLike(request.getIsLike())
+                    .build());
+        }
+    }
 }

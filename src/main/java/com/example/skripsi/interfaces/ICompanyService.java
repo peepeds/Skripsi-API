@@ -34,4 +34,8 @@ public interface ICompanyService {
     List<CompanyOptionsResponse> getTopCompaniesAvgRating();
 
     Boolean isCompanyRequestOwner(Long requestId, Long userId);
+
+    Boolean saveCompany(String slug, SaveCompanyRequest request);
+
+    CursorPageResponse<CompanyOptionsResponse> getMyBookmarks(Long cursor, int limit);
 }

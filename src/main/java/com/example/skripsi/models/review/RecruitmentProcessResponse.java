@@ -40,5 +40,6 @@ public class RecruitmentProcessResponse {
         private String selectionProcess;
         private String tipsTricks;
         private OffsetDateTime createdAt;
+        private Long totalLikes;
     }
 }
