@@ -44,8 +44,10 @@ public class MessageConstants {
         public static final String COMPANY_REQUEST_DETAIL = "Company request detail";
         public static final String SUCCESSFULLY_GET_TOP_10_COMPANIES = "Successfully get top 10 companies by rating";
         public static final String SUCCESSFULLY_GET_COMPANY_PROFILE = "Successfully get company profile";
+        public static final String SUCCESSFULLY_SAVE_COMPANY = "Successfully updated company save status";
         public static final String SUCCESSFULLY_GET_ALL_USER = "Successfully Get All User";
         public static final String SUCCESSFULLY_GET_PROFILE = "Successfully get profile";
+        public static final String SUCCESSFULLY_GET_BOOKMARKS = "Successfully get bookmarks";
         public static final String EMAIL_IS_REQUIRED = "Email is required";
         public static final String EMAIL_ALREADY_USED_CONFLICT = "Email already used!";
         public static final String EMAIL_IS_AVAILABLE = "Email is available";

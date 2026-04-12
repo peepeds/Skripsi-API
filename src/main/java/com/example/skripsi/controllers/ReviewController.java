@@ -3,7 +3,9 @@ package com.example.skripsi.controllers;
 import com.example.skripsi.interfaces.IReviewService;
 import com.example.skripsi.models.WebResponse;
 import com.example.skripsi.models.review.CreateReviewRequest;
+import com.example.skripsi.models.review.LikeRequest;
 import jakarta.validation.Valid;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -92,6 +94,16 @@ public class ReviewController {
                 .success(true)
                 .message("Successfully retrieved recruitment process summary")
                 .result(result)
+                .build();
+    }
+
+    @PostMapping("/like")
+    @PreAuthorize("isAuthenticated()")
+    public WebResponse<?> toggleLike(@Valid @RequestBody LikeRequest request) {
+        reviewService.toggleLike(request);
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully updated like status")
                 .build();
     }
 }

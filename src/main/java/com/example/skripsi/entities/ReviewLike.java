@@ -22,8 +22,8 @@ public class ReviewLike {
     @Column(name = "internship_header_id", nullable = false)
     private Long internshipHeaderId;
 
-    @Column(name = "review_id", nullable = false)
-    private Long reviewId;
+    @Column(name = "is_like", nullable = false)
+    private Boolean isLike;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", insertable = false, updatable = false)

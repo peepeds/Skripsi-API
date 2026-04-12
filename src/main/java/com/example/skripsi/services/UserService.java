@@ -41,7 +41,8 @@ public class UserService implements IUserService {
                        UserNotificationRepository userNotificationRepository,
                        UserCertificateRequestRepository userCertificateRequestRepository,
                        @Lazy AuditService auditService,
-                       UserCertificatesRepository userCertificatesRepository, MinioConfig minioConfig){
+                       UserCertificatesRepository userCertificatesRepository,
+                       MinioConfig minioConfig){
         this.userProfileRepository = userProfileRepository;
         this.userRepository = userRepository;
         this.securityUtils = securityUtils;
