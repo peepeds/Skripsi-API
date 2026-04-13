@@ -201,6 +201,71 @@ public class ReviewService implements IReviewService {
     }
 
     @Override
+    public CursorPageResponse<MyReviewsResponse.ReviewItem> getMyReviews(Long cursor, int limit) {
+        Long userId = securityUtils.getCurrentUserId();
+        Pageable pageable = PageRequest.of(0, limit + 1);
+        List<InternshipHeader> headers = internshipHeaderRepository.findPageByUserIdDesc(userId, cursor, pageable);
+
+        if (headers.isEmpty()) {
+            return CursorPageResponse.<MyReviewsResponse.ReviewItem>builder()
+                    .result(List.of())
+                    .meta(CursorPageResponse.Meta.builder()
+                            .nextCursor(null)
+                            .previousCursor(null)
+                            .size(0)
+                            .hasMore(false)
+                            .build())
+                    .build();
+        }
+
+        boolean hasMore = headers.size() > limit;
+        List<InternshipHeader> pageHeaders = hasMore ? headers.subList(0, limit) : headers;
+
+        List<Long> headerIds = pageHeaders.stream()
+                .map(InternshipHeader::getInternshipHeaderId)
+                .collect(Collectors.toList());
+        List<Long> companyIds = pageHeaders.stream()
+                .map(InternshipHeader::getCompanyId)
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<Long, InternshipDetail> detailMap = internshipDetailRepository.findByInternshipHeaderIds(headerIds)
+                .stream()
+                .collect(Collectors.toMap(InternshipDetail::getInternshipHeaderId, d -> d));
+        Map<Long, Company> companyMap = companyService.getCompanyInfoByIds(companyIds);
+
+        List<MyReviewsResponse.ReviewItem> items = pageHeaders.stream()
+                .map(header -> {
+                    InternshipDetail detail = detailMap.get(header.getInternshipHeaderId());
+                    Company company = companyMap.get(header.getCompanyId());
+                    String slug = company != null ? company.getCompanySlug() : null;
+                    Long headerId = header.getInternshipHeaderId();
+                    return MyReviewsResponse.ReviewItem.builder()
+                            .companyName(company != null ? company.getCompanyName() : null)
+                            .jobTitle(header.getJobTitle())
+                            .testimony(detail != null ? detail.getTestimony() : null)
+                            .recruitmentUrl(slug != null ? "company/" + slug + "/recruitment/" + headerId : null)
+                            .reviewUrl(slug != null ? "company/" + slug + "/review/" + headerId : null)
+                            .build();
+                })
+                .collect(Collectors.toList());
+
+        Long nextCursor = hasMore
+                ? pageHeaders.get(pageHeaders.size() - 1).getInternshipHeaderId()
+                : null;
+
+        return CursorPageResponse.<MyReviewsResponse.ReviewItem>builder()
+                .result(items)
+                .meta(CursorPageResponse.Meta.builder()
+                        .nextCursor(nextCursor)
+                        .previousCursor(cursor)
+                        .size(items.size())
+                        .hasMore(hasMore)
+                        .build())
+                .build();
+    }
+
+    @Override
     public CursorPageResponse<RecruitmentProcessResponse.ProcessItem> getRecruitmentProcesses(String slug, Long cursor, int limit) {
         log.info("[getRecruitmentProcesses] slug={}, cursor={}, limit={}", slug, cursor, limit);
         Long companyId = companyService.getCompanyIdBySlug(slug);
@@ -928,6 +993,7 @@ public class ReviewService implements IReviewService {
                 .averageRating(row.getAverageRating() != null ? row.getAverageRating() : 0.0)
                 .companyName(row.getCompanyName())
                 .companyCategory(row.getCompanyCategory())
+                .companySubCategory(row.getCompanySubCategory())
                 .companyWebsite(row.getCompanyWebsite())
                 .jobTitle(row.getJobTitle())
                 .createdAt(OffsetDateTime.ofInstant(row.getCreatedAt(), ZoneId.systemDefault()))

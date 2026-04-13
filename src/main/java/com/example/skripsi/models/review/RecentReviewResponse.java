@@ -28,6 +28,7 @@ public class RecentReviewResponse {
         private Double averageRating;
         private String companyName;
         private String companyCategory;
+        private String companySubCategory;
         private String companyWebsite;
         private String jobTitle;
         private OffsetDateTime createdAt;

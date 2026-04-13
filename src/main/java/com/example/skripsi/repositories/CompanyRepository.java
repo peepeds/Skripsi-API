@@ -107,6 +107,33 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
     List<Company> findPageFromCursor(@Param("cursor") Long cursor, Pageable pageable);
 
     @Query("""
+        SELECT c FROM Company c
+        WHERE (:cursor IS NULL OR c.companyId < :cursor)
+        ORDER BY c.companyId DESC
+    """)
+    List<Company> findPageFromCursorLatest(@Param("cursor") Long cursor, Pageable pageable);
+
+    @Query(value = """
+        WITH company_ratings AS (
+            SELECT ih.company_id,
+                   ROUND(AVG((id.work_culture_rating + id.learning_opportunity_rating + id.mentorship_rating + id.benefits_rating + id.work_life_balance_rating) / 5.0), 1) AS avg_rating
+            FROM internship_details id
+            INNER JOIN internship_headers ih ON id.internship_header_id = ih.internship_header_id
+            GROUP BY ih.company_id
+        )
+        SELECT c.* FROM companies c
+        LEFT JOIN company_ratings cr ON cr.company_id = c.company_id
+        WHERE :cursor IS NULL
+           OR (COALESCE(cr.avg_rating, 0) < (
+                   SELECT COALESCE(cr2.avg_rating, 0) FROM company_ratings cr2 WHERE cr2.company_id = :cursor))
+           OR (COALESCE(cr.avg_rating, 0) = (
+                   SELECT COALESCE(cr2.avg_rating, 0) FROM company_ratings cr2 WHERE cr2.company_id = :cursor)
+               AND c.company_id > :cursor)
+        ORDER BY COALESCE(cr.avg_rating, 0) DESC, c.company_id ASC
+    """, nativeQuery = true)
+    List<Company> findPageFromCursorTop(@Param("cursor") Long cursor, Pageable pageable);
+
+    @Query("""
         SELECT DISTINCT new com.example.skripsi.models.company.CompanyOptionsResponse(
             c.companyId,
             c.companyName,

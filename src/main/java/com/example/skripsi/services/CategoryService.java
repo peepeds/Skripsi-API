@@ -2,11 +2,13 @@ package com.example.skripsi.services;
 
 import com.example.skripsi.entities.*;
 import com.example.skripsi.exceptions.BadRequestExceptions;
+import com.example.skripsi.exceptions.ResourceNotFoundException;
 import com.example.skripsi.models.category.*;
 import com.example.skripsi.models.company.*;
 import com.example.skripsi.models.*;
 import com.example.skripsi.models.constant.*;
 import com.example.skripsi.repositories.*;
+import com.example.skripsi.repositories.projections.SubCategorySummaryProjection;
 import com.example.skripsi.interfaces.*;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
@@ -21,13 +23,19 @@ public class CategoryService implements ICategoryService {
     private final CategoryRepository categoryRepository;
     private final SubCategoryRepository subCategoryRepository;
     private final ICompanyService companyService;
+    private final CompanyProfileRepository companyProfileRepository;
+    private final InternshipDetailRepository internshipDetailRepository;
 
     public CategoryService(CategoryRepository categoryRepository,
                           SubCategoryRepository subCategoryRepository,
-                          @Lazy ICompanyService companyService) {
+                          @Lazy ICompanyService companyService,
+                          CompanyProfileRepository companyProfileRepository,
+                          InternshipDetailRepository internshipDetailRepository) {
         this.categoryRepository = categoryRepository;
         this.subCategoryRepository = subCategoryRepository;
         this.companyService = companyService;
+        this.companyProfileRepository = companyProfileRepository;
+        this.internshipDetailRepository = internshipDetailRepository;
     }
 
     public List<Category> getCategories(boolean includeSubCategories) {
@@ -138,6 +146,36 @@ public class CategoryService implements ICategoryService {
                         .size(0)
                         .hasMore(false)
                         .build())
+                .build();
+    }
+
+    @Override
+    public SubCategorySummaryResponse getSubCategorySummary(String subCategoryName) {
+        SubCategory subCategory = subCategoryRepository.findBySubCategoryNameIgnoreCase(subCategoryName)
+                .orElseThrow(() -> new ResourceNotFoundException("SubCategory not found: " + subCategoryName));
+
+        Long subCategoryId = subCategory.getSubCategoryId();
+        String categoryType = subCategory.getCategory().getCategoryType();
+
+        Long totalCompanies;
+        Long totalPartnerCompanies;
+        SubCategorySummaryProjection summary;
+
+        if (TypeConstants.JOBS.equals(categoryType)) {
+            totalCompanies = companyProfileRepository.countCompaniesByJobSubcategoryId(subCategoryId);
+            totalPartnerCompanies = companyProfileRepository.countPartnerCompaniesByJobSubcategoryId(subCategoryId);
+            summary = internshipDetailRepository.findSummaryByJobSubCategoryId(subCategoryId);
+        } else {
+            totalCompanies = companyProfileRepository.countBySubcategoryId(subCategoryId);
+            totalPartnerCompanies = companyProfileRepository.countPartnersBySubcategoryId(subCategoryId);
+            summary = internshipDetailRepository.findSummaryBySubCategoryId(subCategoryId);
+        }
+
+        return SubCategorySummaryResponse.builder()
+                .totalCompanies(totalCompanies)
+                .totalReviews(summary != null ? summary.getTotalReviews() : 0L)
+                .avgRating(summary != null ? summary.getAvgRating() : null)
+                .totalPartnerCompanies(totalPartnerCompanies)
                 .build();
     }
 }

@@ -48,6 +48,7 @@ public class MessageConstants {
         public static final String SUCCESSFULLY_GET_ALL_USER = "Successfully Get All User";
         public static final String SUCCESSFULLY_GET_PROFILE = "Successfully get profile";
         public static final String SUCCESSFULLY_GET_BOOKMARKS = "Successfully get bookmarks";
+        public static final String SUCCESSFULLY_GET_MY_REVIEWS = "Successfully get my reviews";
         public static final String EMAIL_IS_REQUIRED = "Email is required";
         public static final String EMAIL_ALREADY_USED_CONFLICT = "Email already used!";
         public static final String EMAIL_IS_AVAILABLE = "Email is available";

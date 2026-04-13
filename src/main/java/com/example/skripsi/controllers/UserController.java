@@ -1,6 +1,7 @@
 package com.example.skripsi.controllers;
 
 import com.example.skripsi.interfaces.ICompanyService;
+import com.example.skripsi.interfaces.IReviewService;
 import com.example.skripsi.models.*;
 import com.example.skripsi.models.user.*;
 import com.example.skripsi.models.constant.*;
@@ -18,10 +19,12 @@ public class UserController {
 
     private final UserService userService;
     private final ICompanyService companyService;
+    private final IReviewService reviewService;
 
-    public UserController(UserService userService, ICompanyService companyService){
+    public UserController(UserService userService, ICompanyService companyService, IReviewService reviewService){
         this.userService = userService;
         this.companyService = companyService;
+        this.reviewService = reviewService;
     }
 
     @GetMapping("")
@@ -130,6 +133,21 @@ public class UserController {
         return WebResponse.builder()
                 .success(true)
                 .message(MessageConstants.Success.SUCCESSFULLY_GET_BOOKMARKS)
+                .meta(results.getMeta())
+                .result(results.getResult())
+                .build();
+    }
+
+    @GetMapping("/my-reviews")
+    @PreAuthorize("isAuthenticated()")
+    public WebResponse<?> getMyReviews(
+            @RequestParam(value = "cursor", required = false) Long cursor,
+            @RequestParam(value = "limit", defaultValue = "10") int limit) {
+        var results = reviewService.getMyReviews(cursor, limit);
+
+        return WebResponse.builder()
+                .success(true)
+                .message(MessageConstants.Success.SUCCESSFULLY_GET_MY_REVIEWS)
                 .meta(results.getMeta())
                 .result(results.getResult())
                 .build();
