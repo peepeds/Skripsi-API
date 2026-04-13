@@ -5,9 +5,10 @@ import com.example.skripsi.models.*;
 import com.example.skripsi.models.company.*;
 
 import java.util.List;
+import java.util.Map;
 
 public interface ICompanyService {
-    CursorPageResponse<CompanyOptionsResponse> getCompany(Long cursor, int limit);
+    CursorPageResponse<CompanyOptionsResponse> getCompany(Long cursor, int limit, String sort);
 
     CompanyOptionsResponse getCompanyBySlug(String slug);
 
@@ -38,4 +39,6 @@ public interface ICompanyService {
     Boolean saveCompany(String slug, SaveCompanyRequest request);
 
     CursorPageResponse<CompanyOptionsResponse> getMyBookmarks(Long cursor, int limit);
+
+    Map<Long, Company> getCompanyInfoByIds(List<Long> companyIds);
 }

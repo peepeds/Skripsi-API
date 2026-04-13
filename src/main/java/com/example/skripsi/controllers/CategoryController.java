@@ -4,6 +4,9 @@ import com.example.skripsi.models.*;
 import com.example.skripsi.services.*;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+
 @RestController
 public class CategoryController {
     private final CategoryService categoryService;
@@ -46,6 +49,17 @@ public class CategoryController {
         return WebResponse.builder()
                 .success(true)
                 .message("Successfully Get Top Categories data")
+                .result(result)
+                .build();
+    }
+
+    @GetMapping("/subcategory/{subCategoryName}/summary")
+    public WebResponse<?> getSubCategorySummary(@PathVariable("subCategoryName") String subCategoryName) {
+        String decoded = URLDecoder.decode(subCategoryName, StandardCharsets.UTF_8);
+        var result = categoryService.getSubCategorySummary(decoded);
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully Get SubCategory Summary data")
                 .result(result)
                 .build();
     }

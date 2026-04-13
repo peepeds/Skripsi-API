@@ -80,10 +80,18 @@ public class CompanyService implements ICompanyService {
     }
 
     @Override
-    public CursorPageResponse<CompanyOptionsResponse> getCompany(Long cursor, int limit) {
-        log.info("[getCompany] cursor={} limit={}", cursor, limit);
+    public CursorPageResponse<CompanyOptionsResponse> getCompany(Long cursor, int limit, String sort) {
+        log.info("[getCompany] cursor={} limit={} sort={}", cursor, limit, sort);
         Pageable pageable = PageRequest.of(0, limit + 1);
-        List<Company> companies = companyRepository.findPageFromCursor(cursor, pageable);
+
+        List<Company> companies;
+        if ("latest".equals(sort)) {
+            companies = companyRepository.findPageFromCursorLatest(cursor, pageable);
+        } else if ("top".equals(sort)) {
+            companies = companyRepository.findPageFromCursorTop(cursor, pageable);
+        } else {
+            companies = companyRepository.findPageFromCursor(cursor, pageable);
+        }
 
         boolean hasMore = companies.size() > limit;
         List<Company> pageCompanies = hasMore ? companies.subList(0, limit) : companies;
@@ -367,8 +375,13 @@ public class CompanyService implements ICompanyService {
     }
 
     @Override
+    public Map<Long, Company> getCompanyInfoByIds(List<Long> companyIds) {
+        return companyRepository.findAllById(companyIds).stream()
+                .collect(Collectors.toMap(Company::getCompanyId, c -> c));
+    }
+
+    @Override
     public Boolean isCompanyRequestOwner(Long requestId, Long userId) {
-        if (requestId == null || userId == null) return false;
         return companyRequestRepository.findById(requestId)
                 .map(req -> req.getCreatedBy().equals(userId))
                 .orElse(false);

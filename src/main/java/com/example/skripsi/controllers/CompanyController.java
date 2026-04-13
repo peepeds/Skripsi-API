@@ -22,7 +22,8 @@ public class CompanyController {
     @GetMapping("")
     public WebResponse<?> getCompanies(@RequestParam(value = "cursor", required = false) Long cursor,
                                        @RequestParam(value = "limit", required = false) Integer limit,
-                                       @RequestParam(value = "search", required = false) String search) {
+                                       @RequestParam(value = "search", required = false) String search,
+                                       @RequestParam(value = "sort", required = false) String sort) {
         if (search != null && !search.isEmpty()) {
             var results = companyService.searchCompanies(search);
             return WebResponse.builder()
@@ -32,7 +33,7 @@ public class CompanyController {
                     .build();
         } else {
             int limitVal = limit != null ? limit : 15;
-            var results = companyService.getCompany(cursor, limitVal);
+            var results = companyService.getCompany(cursor, limitVal, sort);
             return WebResponse.builder()
                     .success(true)
                     .message(MessageConstants.Success.SUCCESSFULLY_GET_COMPANIES)

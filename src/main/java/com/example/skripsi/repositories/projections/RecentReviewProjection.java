@@ -8,6 +8,7 @@ public interface RecentReviewProjection {
     Double getAverageRating();
     String getCompanyName();
     String getCompanyCategory();
+    String getCompanySubCategory();
     String getCompanyWebsite();
     String getJobTitle();
     Instant getCreatedAt();
