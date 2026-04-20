@@ -25,5 +25,4 @@ public class UserResponse {
     private String role;
     private String lastLogin;
     private List<CertificateResponse> certificates;
-    private List<CertificateUrlResponse> certificate;
 }

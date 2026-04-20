@@ -10,7 +10,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CreateCertificateRequest {
-    private String issuer;
+    private Long issuer;
     private String certificateUrl;
     private String certificateName;
     private Long fileSize;

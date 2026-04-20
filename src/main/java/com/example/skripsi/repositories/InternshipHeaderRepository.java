@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -16,7 +17,7 @@ public interface InternshipHeaderRepository extends JpaRepository<InternshipHead
     List<InternshipHeader> findByCompanyId(Long companyId);
     Optional<InternshipHeader> findByUserIdAndCompanyId(Long userId, Long companyId);
 
-    @Query("SELECT DISTINCT ih.jobTitle FROM InternshipHeader ih WHERE LOWER(ih.jobTitle) LIKE LOWER(CONCAT('%', :query, '%')) ORDER BY ih.jobTitle")
+    @Query("SELECT DISTINCT ih.jobTitle FROM InternshipHeader ih WHERE LOWER(ih.jobTitle) LIKE LOWER(CONCAT(:query, '%')) ORDER BY ih.jobTitle")
     List<String> searchJobTitles(@Param("query") String query);
 
     @Query("SELECT ih FROM InternshipHeader ih WHERE ih.internshipHeaderId IN :headerIds")
@@ -31,6 +32,6 @@ public interface InternshipHeaderRepository extends JpaRepository<InternshipHead
     @Query("SELECT ih FROM InternshipHeader ih WHERE ih.userId = :userId AND (:cursor IS NULL OR ih.internshipHeaderId < :cursor) ORDER BY ih.internshipHeaderId DESC")
     List<InternshipHeader> findPageByUserIdDesc(@Param("userId") Long userId, @Param("cursor") Long cursor, Pageable pageable);
 
-    @Query("SELECT ih FROM InternshipHeader ih WHERE ih.userId = :userId AND YEAR(ih.startYear) = :year")
-    List<InternshipHeader> findByUserIdAndYear(@Param("userId") Long userId, @Param("year") Integer year);
+    @Query("SELECT ih FROM InternshipHeader ih WHERE ih.userId = :userId AND ih.startYear >= :startOfYear AND ih.startYear < :endOfYear")
+    List<InternshipHeader> findByUserIdAndYear(@Param("userId") Long userId, @Param("startOfYear") LocalDate startOfYear, @Param("endOfYear") LocalDate endOfYear);
 }
