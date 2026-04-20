@@ -55,6 +55,7 @@ public class ReviewService implements IReviewService {
     private final IUserService userService;
     private final SubCategoryRepository subCategoryRepository;
     private final ReviewLikeRepository reviewLikeRepository;
+    private final UserCertificatesRepository userCertificatesRepository;
 
     public ReviewService(InternshipHeaderRepository internshipHeaderRepository,
                          InternshipDetailRepository internshipDetailRepository,
@@ -67,7 +68,8 @@ public class ReviewService implements IReviewService {
                          LookupRepository lookupRepository,
                          IUserService userService,
                          SubCategoryRepository subCategoryRepository,
-                         ReviewLikeRepository reviewLikeRepository) {
+                         ReviewLikeRepository reviewLikeRepository,
+                         UserCertificatesRepository userCertificatesRepository) {
         this.internshipHeaderRepository = internshipHeaderRepository;
         this.internshipDetailRepository = internshipDetailRepository;
         this.recruitmentStepRepository = recruitmentStepRepository;
@@ -80,6 +82,7 @@ public class ReviewService implements IReviewService {
         this.userService = userService;
         this.subCategoryRepository = subCategoryRepository;
         this.reviewLikeRepository = reviewLikeRepository;
+        this.userCertificatesRepository = userCertificatesRepository;
     }
 
     @Override
@@ -137,9 +140,16 @@ public class ReviewService implements IReviewService {
 
         List<InternshipDetail> details = internshipDetailRepository.findAllDetailsByCompanyId(companyId);
 
-        String type = getMostFrequentType(details);
+        Map<String, Map<String, String>> lookups = loadInternshipReviewLookups();
+        Map<String, String> typeLookup = lookups.getOrDefault(LOOKUP_CODE_INTERNSHIP_TYPE, Map.of());
+        Map<String, String> schemeLookup = lookups.getOrDefault(LOOKUP_CODE_SCHEME, Map.of());
+
+        String typeCode = getMostFrequentType(details);
+        String type = typeCode != null ? typeLookup.getOrDefault(typeCode, typeCode) : null;
         String duration = getDurationRange(headers);
-        List<String> workSchemes = getWorkSchemesSortedByFrequency(details);
+        List<String> workSchemes = getWorkSchemesSortedByFrequency(details).stream()
+                .map(code -> schemeLookup.getOrDefault(code, code))
+                .collect(Collectors.toList());
         List<String> subCategories = getTop5SubCategories(companyId);
         ReviewSummaryResponse.Ratings ratings = aggregateRatings(details);
         ReviewSummaryResponse.RecruitmentProcesses recruitmentProcesses = aggregateRecruitmentProcesses(companyId);
@@ -176,7 +186,7 @@ public class ReviewService implements IReviewService {
         boolean hasMore = headers.size() > limit;
         List<InternshipHeader> pageHeaders = hasMore ? headers.subList(0, limit) : headers;
 
-        ReviewDataBundle data = loadReviewData(pageHeaders);
+        ReviewDataBundle data = loadReviewData(pageHeaders, companyId);
         log.info("[getCompanyReviews] data bundle ready, building review items");
 
         List<CompanyReviewsResponse.ReviewItem> items = pageHeaders.stream()
@@ -291,7 +301,7 @@ public class ReviewService implements IReviewService {
         boolean hasMore = headers.size() > limit;
         List<InternshipHeader> pageHeaders = hasMore ? headers.subList(0, limit) : headers;
 
-        ReviewDataBundle data = loadReviewData(pageHeaders);
+        ReviewDataBundle data = loadReviewData(pageHeaders, companyId);
         log.info("[getRecruitmentProcesses] data bundle ready, building process items");
 
         List<RecruitmentProcessResponse.ProcessItem> items = pageHeaders.stream()
@@ -485,7 +495,9 @@ public class ReviewService implements IReviewService {
     }
 
     private void validateTotalInternshipDuration(Long userId, Integer year, Integer newDuration) {
-        List<InternshipHeader> userReviewsInYear = internshipHeaderRepository.findByUserIdAndYear(userId, year);
+        LocalDate startOfYear = LocalDate.of(year, 1, 1);
+        LocalDate endOfYear = LocalDate.of(year + 1, 1, 1);
+        List<InternshipHeader> userReviewsInYear = internshipHeaderRepository.findByUserIdAndYear(userId, startOfYear, endOfYear);
         
         Integer totalDuration = userReviewsInYear.stream()
                 .map(InternshipHeader::getDurationMonths)
@@ -837,7 +849,7 @@ public class ReviewService implements IReviewService {
                 .build();
     }
 
-    private ReviewDataBundle loadReviewData(List<InternshipHeader> headers) {
+    private ReviewDataBundle loadReviewData(List<InternshipHeader> headers, Long companyId) {
         log.info("[loadReviewData] loading data for headerCount={}", headers.size());
         List<Long> headerIds = headers.stream()
                 .map(InternshipHeader::getInternshipHeaderId)
@@ -892,7 +904,9 @@ public class ReviewService implements IReviewService {
                         com.example.skripsi.repositories.projections.ReviewLikeCountProjection::getLikeCount
                 ));
 
-        return new ReviewDataBundle(detailMap, subCategoriesMap, stepsMap, lookupDescMap, userNameMap, likeCountMap);
+        Set<Long> verifiedReviewerUserIds = userCertificatesRepository.findVerifiedUserIdsByIssuerAndUserIds(companyId, userIds);
+
+        return new ReviewDataBundle(detailMap, subCategoriesMap, stepsMap, lookupDescMap, userNameMap, likeCountMap, verifiedReviewerUserIds);
     }
 
     private CompanyReviewsResponse.ReviewItem toReviewItem(InternshipHeader header, ReviewDataBundle data) {
@@ -947,6 +961,7 @@ public class ReviewService implements IReviewService {
                 .tipsTricks(detail != null ? detail.getTipsTricks() : null)
                 .createdAt(detail != null ? detail.getCreatedAt() : null)
                 .totalLikes(data.likeCountMap().getOrDefault(headerId, 0L))
+                .verifiedReviewer(data.verifiedReviewerUserIds().contains(header.getUserId()))
                 .build();
     }
 
@@ -983,6 +998,7 @@ public class ReviewService implements IReviewService {
                 .tipsTricks(detail != null ? detail.getTipsTricks() : null)
                 .createdAt(detail != null ? detail.getCreatedAt() : null)
                 .totalLikes(data.likeCountMap().getOrDefault(headerId, 0L))
+                .verifiedReviewer(data.verifiedReviewerUserIds().contains(header.getUserId()))
                 .build();
     }
 
@@ -1012,7 +1028,8 @@ public class ReviewService implements IReviewService {
             Map<Long, List<Integer>> stepsMap,
             Map<String, Map<String, String>> lookupDescMap,
             Map<Long, String> userNameMap,
-            Map<Long, Long> likeCountMap
+            Map<Long, Long> likeCountMap,
+            Set<Long> verifiedReviewerUserIds
     ) {}
 
     @Override

@@ -153,4 +153,16 @@ public class UserController {
                 .build();
     }
 
+    @GetMapping("/my-certificates")
+    @PreAuthorize("isAuthenticated()")
+    public WebResponse<?> getMyCertificates() {
+        var certificates = userService.getMyCertificates();
+
+        return WebResponse.builder()
+                .success(true)
+                .message(MessageConstants.Success.SUCCESSFULLY_GET_MY_CERTIFICATES)
+                .result(certificates)
+                .build();
+    }
+
 }

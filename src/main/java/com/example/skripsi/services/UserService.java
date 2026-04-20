@@ -33,6 +33,8 @@ public class UserService implements IUserService {
     private final AuditService auditService;
     private final UserCertificatesRepository userCertificatesRepository;
     private final MinioConfig minioConfig;
+    private final IMinioService minioService;
+    private final CompanyRepository companyRepository;
 
     public UserService(UserRepository userRepository,
                        UserProfileRepository userProfileRepository,
@@ -42,7 +44,9 @@ public class UserService implements IUserService {
                        UserCertificateRequestRepository userCertificateRequestRepository,
                        @Lazy AuditService auditService,
                        UserCertificatesRepository userCertificatesRepository,
-                       MinioConfig minioConfig){
+                       MinioConfig minioConfig,
+                       IMinioService minioService,
+                       CompanyRepository companyRepository){
         this.userProfileRepository = userProfileRepository;
         this.userRepository = userRepository;
         this.securityUtils = securityUtils;
@@ -52,6 +56,8 @@ public class UserService implements IUserService {
         this.auditService = auditService;
         this.userCertificatesRepository = userCertificatesRepository;
         this.minioConfig = minioConfig;
+        this.minioService = minioService;
+        this.companyRepository = companyRepository;
     }
 
     @Override
@@ -139,6 +145,7 @@ public class UserService implements IUserService {
                 .documentUrl(request.getCertificateUrl())
                 .documentType(DocumentTypeConstants.CERTIFICATE)
                 .fileSize(request.getFileSize())
+                .issuer(request.getIssuer())
                 .status(StatusConstants.PENDING)
                 .createdAt(OffsetDateTime.now())
                 .createdBy(userId)
@@ -152,7 +159,7 @@ public class UserService implements IUserService {
         auditService.record(EntityTypeConstants.UPLOAD_CERTIFICATES, userCertificateRequest.getDocumentId(), ActionConstants.SUBMITTED, userId);
         log.info("[submitCertificateRequest] created documentId={} userId={}", userCertificateRequest.getDocumentId(), userId);
 
-        return toCertificateResponse(request.getIssuer(), request.getCertificateUrl());
+        return toCertificateResponse(request.getIssuer(), request.getCertificateUrl(), request.getCertificateName());
     }
 
     public CertificateResponse reviewCertificateRequest(Long requestId, ReviewCertificateRequest request) {
@@ -162,26 +169,27 @@ public class UserService implements IUserService {
         UserCertificateRequest userCertificateRequest = userCertificateRequestRepository.findById(requestId)
                 .orElseThrow(() -> {
                     log.warn("[reviewCertificateRequest] request not found requestId={}", requestId);
-                    return new InvalidCredentialsException(MessageConstants.NotFound.REQUEST_DOCUMENT_NOT_FOUND);
+                    return new ResourceNotFoundException(MessageConstants.NotFound.REQUEST_DOCUMENT_NOT_FOUND);
                 });
 
         if (!DocumentTypeConstants.CERTIFICATE.equals(userCertificateRequest.getDocumentType())) {
-            throw new InvalidCredentialsException(MessageConstants.Validation.INVALID_DOCUMENT_TYPE);
+            throw new BadRequestExceptions(MessageConstants.Validation.INVALID_DOCUMENT_TYPE);
         }
 
         if (ActionConstants.APPROVED.equals(userCertificateRequest.getStatus()) || ActionConstants.REJECTED.equals(userCertificateRequest.getStatus())) {
             log.warn("[reviewCertificateRequest] already finalized requestId={} currentStatus={}", requestId, userCertificateRequest.getStatus());
-            throw new InvalidCredentialsException(MessageConstants.Certificate.CERTIFICATE_REQUEST_ALREADY_FINALIZED + userCertificateRequest.getStatus().toLowerCase() + MessageConstants.Certificate.CANNOT_BE_CHANGED);
+            throw new BadRequestExceptions(MessageConstants.Certificate.CERTIFICATE_REQUEST_ALREADY_FINALIZED + userCertificateRequest.getStatus().toLowerCase() + MessageConstants.Certificate.CANNOT_BE_CHANGED);
         }
 
         if (ActionConstants.APPROVED.equals(request.getStatus())) {
-            UserProfile userProfile = userProfileRepository.findById(userCertificateRequest.getNotification().getReferenceId())
-                    .orElseThrow(() -> new InvalidCredentialsException(MessageConstants.NotFound.USER_PROFILE_NOT_FOUND));
+            UserProfile userProfile = userProfileRepository.findByUserUserId(userCertificateRequest.getCreatedBy())
+                    .orElseThrow(() -> new ResourceNotFoundException(MessageConstants.NotFound.USER_PROFILE_NOT_FOUND));
 
             UserCertificates userCertificate = UserCertificates.builder()
                     .userProfile(userProfile)
-                    .issuer(userCertificateRequest.getDocumentName()) // assuming issuer is stored in documentName or need to adjust
+                    .issuer(userCertificateRequest.getIssuer())
                     .certificatesUrl(userCertificateRequest.getDocumentUrl())
+                    .certificateName(userCertificateRequest.getDocumentName())
                     .createdAt(OffsetDateTime.now())
                     .updatedAt(OffsetDateTime.now())
                     .build();
@@ -226,7 +234,7 @@ public class UserService implements IUserService {
         auditService.record(EntityTypeConstants.UPLOAD_CERTIFICATES, requestId, actionLabel, reviewerId, request.getReviewNote());
         log.info("[reviewCertificateRequest] done requestId={} action={} reviewerId={}", requestId, actionLabel, reviewerId);
 
-        return toCertificateResponse(userCertificateRequest.getDocumentName(), userCertificateRequest.getDocumentUrl());
+        return toCertificateResponse(userCertificateRequest.getIssuer(), userCertificateRequest.getDocumentUrl(), userCertificateRequest.getDocumentName());
     }
 
     public CertificateRequestDetailResponse getCertificateRequestDetail(Long requestId) {
@@ -297,6 +305,42 @@ public class UserService implements IUserService {
                 .orElse(false);
     }
 
+    @Override
+    public List<CertificateResponse> getMyCertificates() {
+        Long userId = securityUtils.getCurrentUserId();
+        log.info("[getMyCertificates] userId={}", userId);
+        UserProfile userProfile = userProfileRepository.findByUserUserId(userId)
+                .orElseThrow(() -> {
+                    log.warn("[getMyCertificates] profile not found userId={}", userId);
+                    return new InvalidCredentialsException(MessageConstants.NotFound.USER_PROFILE_NOT_FOUND);
+                });
+
+        return userCertificatesRepository.findByUserProfile_UserProfileId(userProfile.getUserProfileId())
+                .stream()
+                .map(cert -> {
+                    String url;
+                    try {
+                        url = minioService.getPresignedViewUrl(cert.getCertificatesUrl());
+                    } catch (Exception e) {
+                        log.warn("[getMyCertificates] failed to generate presigned url for cert={}", cert.getUserCertificateId(), e);
+                        url = buildMinioProxyUrl(cert.getCertificatesUrl());
+                    }
+                    String issuerName = companyRepository.findById(cert.getIssuer())
+                            .map(Company::getCompanyName)
+                            .orElse(null);
+                    return CertificateResponse.builder()
+                            .userCertificateId(cert.getUserCertificateId())
+                            .issuer(cert.getIssuer())
+                            .issuerName(issuerName)
+                            .certificatesUrl(url)
+                            .certificateName(cert.getCertificateName())
+                            .createdAt(cert.getCreatedAt())
+                            .updatedAt(cert.getUpdatedAt())
+                            .build();
+                })
+                .toList();
+    }
+
     private UserResponse toResponse(User user, UserProfile profile) {
         var roleName = user.getRoles().stream()
                 .findFirst()
@@ -352,13 +396,6 @@ public class UserService implements IUserService {
         var regionName = major != null && major.getRegion() != null ? major.getRegion().getRegionName() : null;
         var deptName = major != null && major.getDepartment() != null ? major.getDepartment().getDeptName() : null;
 
-        var certificateEntities = userCertificatesRepository.findByUserProfile_UserProfileId(userProfile.getUserProfileId());
-        var certificate = certificateEntities.stream()
-                .map(cert -> CertificateUrlResponse.builder()
-                        .url(buildMinioProxyUrl(cert.getCertificatesUrl()))
-                        .build())
-                .toList();
-
         return UserResponse.builder()
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
@@ -368,7 +405,6 @@ public class UserService implements IUserService {
                 .regionName(regionName)
                 .deptName(deptName)
                 .majorName(major != null ? major.getMajorName() : null)
-                .certificate(certificate)
                 .build();
     }
 
@@ -376,11 +412,12 @@ public class UserService implements IUserService {
         return minioConfig.getProxyEndpoint() + "/" + certificatesUrl;
     }
 
-    private CertificateResponse toCertificateResponse(String issuer, String url) {
+    private CertificateResponse toCertificateResponse(Long issuer, String url, String certificateName) {
         return CertificateResponse.builder()
                 .userCertificateId(null)
                 .issuer(issuer)
                 .certificatesUrl(url)
+                .certificateName(certificateName)
                 .createdAt(OffsetDateTime.now())
                 .updatedAt(OffsetDateTime.now())
                 .build();
@@ -388,11 +425,18 @@ public class UserService implements IUserService {
 
     private CertificateRequestDetailResponse toCertificateRequestDetailResponse(
             UserCertificateRequest userCertificateRequest, Notification notification) {
+        String documentUrl;
+        try {
+            documentUrl = minioService.getPresignedViewUrl(userCertificateRequest.getDocumentUrl());
+        } catch (Exception e) {
+            log.warn("[getCertificateRequestDetail] failed to generate presigned url for requestId={}", userCertificateRequest.getDocumentId(), e);
+            documentUrl = buildMinioProxyUrl(userCertificateRequest.getDocumentUrl());
+        }
         return CertificateRequestDetailResponse.builder()
                 .requestDetails(CertificateRequestDetailResponse.RequestDetails.builder()
                         .requestId(userCertificateRequest.getDocumentId())
                         .certificateName(userCertificateRequest.getDocumentName())
-                        .certificatesUrl(userCertificateRequest.getDocumentUrl())
+                        .certificatesUrl(documentUrl)
                         .fileSize(userCertificateRequest.getFileSize())
                         .submittedAt(userCertificateRequest.getCreatedAt())
                         .submittedBy(resolveUserName(userCertificateRequest.getCreatedBy()))

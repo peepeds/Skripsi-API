@@ -24,10 +24,13 @@ public class UserCertificates {
     private UserProfile userProfile;
 
     @Column(name = "issuer")
-    private String issuer;
+    private Long issuer;
 
     @Column(name = "certificates_url")
     private String certificatesUrl;
+
+    @Column(name = "certificate_name")
+    private String certificateName;
 
     @Column(name = "created_at")
     private OffsetDateTime createdAt;

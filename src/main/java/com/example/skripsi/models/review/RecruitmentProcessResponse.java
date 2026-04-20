@@ -41,5 +41,6 @@ public class RecruitmentProcessResponse {
         private String tipsTricks;
         private OffsetDateTime createdAt;
         private Long totalLikes;
+        private Boolean verifiedReviewer;
     }
 }

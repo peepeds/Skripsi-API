@@ -45,6 +45,7 @@ public class CompanyReviewsResponse {
         private String tipsTricks;
         private OffsetDateTime createdAt;
         private Long totalLikes;
+        private Boolean verifiedReviewer;
     }
 
     @Data

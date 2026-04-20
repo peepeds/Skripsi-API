@@ -34,6 +34,9 @@ public class UserCertificateRequest {
     @Column(name = "file_size")
     private Long fileSize;
 
+    @Column(name = "issuer")
+    private Long issuer;
+
     @Column(name = "status")
     private String status;
 

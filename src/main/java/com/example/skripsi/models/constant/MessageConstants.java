@@ -55,6 +55,7 @@ public class MessageConstants {
         public static final String CERTIFICATE_REQUEST_SUBMITTED = "Certificate request submitted successfully";
         public static final String CERTIFICATE_REQUEST_REVIEWED = "Certificate request reviewed successfully";
         public static final String CERTIFICATE_REQUEST_DETAIL = "Certificate request detail";
+        public static final String SUCCESSFULLY_GET_MY_CERTIFICATES = "Successfully get my certificates";
     }
 
     public static class Certificate {

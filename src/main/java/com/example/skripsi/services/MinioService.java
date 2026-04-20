@@ -50,4 +50,15 @@ public class MinioService implements IMinioService {
         result.put("fileName", fileName);
         return result;
     }
+
+    public String getPresignedViewUrl(String fileName) throws Exception {
+        return minioClient.getPresignedObjectUrl(
+                GetPresignedObjectUrlArgs.builder()
+                        .method(Method.GET)
+                        .bucket(minioConfig.getBucketName())
+                        .object(fileName)
+                        .expiry(600)
+                        .build()
+        );
+    }
 }

@@ -13,8 +13,10 @@ import java.time.OffsetDateTime;
 @AllArgsConstructor
 public class CertificateResponse {
     private Long userCertificateId;
-    private String issuer;
+    private Long issuer;
+    private String issuerName;
     private String certificatesUrl;
+    private String certificateName;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
 }

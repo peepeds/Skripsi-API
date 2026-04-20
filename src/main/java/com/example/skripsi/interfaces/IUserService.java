@@ -20,4 +20,5 @@ public interface IUserService {
     List<Notification> findNotificationsByTypeAndReferenceId(String type, Long referenceId);
     List<UserCertificateRequest> findUserCertificateRequestsByNotificationId(Long notificationId);
     Boolean isCertificateRequestOwner(Long requestId, Long userId);
+    List<CertificateResponse> getMyCertificates();
 }
