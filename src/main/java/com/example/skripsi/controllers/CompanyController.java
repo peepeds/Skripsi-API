@@ -4,7 +4,7 @@ import com.example.skripsi.entities.*;
 import com.example.skripsi.interfaces.*;
 import com.example.skripsi.models.*;
 import com.example.skripsi.models.company.*;
-import com.example.skripsi.models.constant.*;
+import com.example.skripsi.securities.SecurityUtils;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -14,9 +14,11 @@ import org.springframework.web.bind.annotation.*;
 public class CompanyController {
 
     private final ICompanyService companyService;
+    private final SecurityUtils securityUtils;
 
-    public CompanyController(ICompanyService companyService) {
+    public CompanyController(ICompanyService companyService, SecurityUtils securityUtils) {
         this.companyService = companyService;
+        this.securityUtils = securityUtils;
     }
 
     @GetMapping("")
@@ -28,7 +30,7 @@ public class CompanyController {
             var results = companyService.searchCompanies(search);
             return WebResponse.builder()
                     .success(true)
-                    .message(MessageConstants.Success.SUCCESSFULLY_SEARCH_COMPANIES)
+                    .message("Successfully search companies")
                     .result(results)
                     .build();
         } else {
@@ -36,7 +38,7 @@ public class CompanyController {
             var results = companyService.getCompany(cursor, limitVal, sort);
             return WebResponse.builder()
                     .success(true)
-                    .message(MessageConstants.Success.SUCCESSFULLY_GET_COMPANIES)
+                    .message("Successfully Get Companies data")
                     .meta(results.getMeta())
                     .result(results.getResult())
                     .build();
@@ -49,7 +51,7 @@ public class CompanyController {
         var result = companyService.submitCompanyRequest(request);
         return WebResponse.builder()
                 .success(true)
-                .message(MessageConstants.Success.SUCCESSFULLY_SUBMIT_COMPANY_REQUEST)
+                .message("Successfully submit company request")
                 .result(result)
                 .build();
     }
@@ -62,7 +64,7 @@ public class CompanyController {
         var results = companyService.getCompanyRequests(status, cursor, limit);
         return WebResponse.builder()
                 .success(true)
-                .message(MessageConstants.Success.SUCCESSFULLY_GET_COMPANY_REQUESTS)
+                .message("Successfully get company requests")
                 .meta(results.getMeta())
                 .result(results.getResult())
                 .build();
@@ -75,7 +77,7 @@ public class CompanyController {
         var result = companyService.reviewCompanyRequest(requestId, request);
         return WebResponse.builder()
                 .success(true)
-                .message(MessageConstants.Success.SUCCESSFULLY_REVIEW_COMPANY_REQUEST)
+                .message("Successfully review company request")
                 .result(result)
                 .build();
     }
@@ -86,17 +88,18 @@ public class CompanyController {
         var result = companyService.getCompanyRequestDetail(requestId);
         return WebResponse.builder()
                 .success(true)
-                .message(MessageConstants.Success.COMPANY_REQUEST_DETAIL)
+                .message("Company request detail")
                 .result(result)
                 .build();
     }
 
     @GetMapping("/top-ratings")
     public WebResponse<?> getTopCompaniesByAverage() {
-        var result = companyService.getTopCompaniesAvgRating();
+        Long userId = securityUtils.getOptionalCurrentUserId().orElse(null);
+        var result = companyService.getTopCompaniesAvgRating(userId);
         return WebResponse.builder()
                 .success(true)
-                .message(MessageConstants.Success.SUCCESSFULLY_GET_TOP_10_COMPANIES)
+                .message("Successfully get top 10 companies by rating")
                 .result(result)
                 .build();
     }
@@ -106,7 +109,7 @@ public class CompanyController {
         var result = companyService.getCompanyBySlug(slug);
         return WebResponse.builder()
                 .success(true)
-                .message(MessageConstants.Success.SUCCESSFULLY_GET_COMPANY_PROFILE)
+                .message("Successfully get company profile")
                 .result(result)
                 .build();
     }
@@ -118,7 +121,7 @@ public class CompanyController {
         var result = companyService.saveCompany(slug, request);
         return WebResponse.builder()
                 .success(true)
-                .message(MessageConstants.Success.SUCCESSFULLY_SAVE_COMPANY)
+                .message("Successfully updated company save status")
                 .result(result)
                 .build();
     }

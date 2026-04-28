@@ -39,6 +39,7 @@ public class CompanyService implements ICompanyService {
     private final ICategoryService categoryService;
     private final IReviewService reviewService;
     private final NotificationHelper notificationHelper;
+    private final UserProfileRepository userProfileRepository;
 
     public CompanyService(CompanyRepository companyRepository,
                           CompanyRequestRepository companyRequestRepository,
@@ -49,7 +50,8 @@ public class CompanyService implements ICompanyService {
                           CompanySaveRepository companySaveRepository,
                           @Lazy ICategoryService categoryService,
                           @Lazy IReviewService reviewService,
-                          NotificationHelper notificationHelper) {
+                          NotificationHelper notificationHelper,
+                          UserProfileRepository userProfileRepository) {
         this.companyRepository = companyRepository;
         this.companyRequestRepository = companyRequestRepository;
         this.auditService = auditService;
@@ -58,6 +60,7 @@ public class CompanyService implements ICompanyService {
         this.companyProfileRepository = companyProfileRepository;
         this.companySaveRepository = companySaveRepository;
         this.categoryService = categoryService;
+        this.userProfileRepository = userProfileRepository;
         this.reviewService = reviewService;
         this.notificationHelper = notificationHelper;
     }
@@ -258,8 +261,8 @@ public class CompanyService implements ICompanyService {
     }
 
     @Override
-    public List<CompanyOptionsResponse> getTopCompaniesAvgRating() {
-        List<Long> companyIds = reviewService.getTop10CompanyIdsByRating();
+    public List<CompanyOptionsResponse> getTopCompaniesAvgRating(Long userId) {
+        List<Long> companyIds = resolveTopCompanyIds(userId);
 
         if (companyIds.isEmpty()) {
             return List.of();
@@ -275,6 +278,32 @@ public class CompanyService implements ICompanyService {
                 .filter(Objects::nonNull)
                 .map(company -> toOptionsResponse(company, enrichment))
                 .collect(Collectors.toList());
+    }
+
+    private List<Long> resolveTopCompanyIds(Long userId) {
+        if (userId == null) {
+            return reviewService.getTop10CompanyIdsByRating();
+        }
+
+        Long majorId = userProfileRepository.findByUserUserId(userId)
+                .map(profile -> profile.getMajor().getMajorId().longValue())
+                .orElse(null);
+
+        if (majorId == null) {
+            return reviewService.getTop10CompanyIdsByRating();
+        }
+
+        List<Long> majorFiltered = reviewService.getTop10CompanyIdsByRatingForMajor(majorId);
+        List<Long> global = reviewService.getTop10CompanyIdsByRating();
+
+        List<Long> merged = new java.util.ArrayList<>(majorFiltered);
+        for (Long id : global) {
+            if (!majorFiltered.contains(id)) {
+                merged.add(id);
+                if (merged.size() == 10) break;
+            }
+        }
+        return merged;
     }
 
     @Override

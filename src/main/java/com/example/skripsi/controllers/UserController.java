@@ -4,7 +4,6 @@ import com.example.skripsi.interfaces.ICompanyService;
 import com.example.skripsi.interfaces.IReviewService;
 import com.example.skripsi.models.*;
 import com.example.skripsi.models.user.*;
-import com.example.skripsi.models.constant.*;
 import com.example.skripsi.services.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -34,7 +33,7 @@ public class UserController {
 
         return WebResponse.builder()
                 .success(true)
-                .message(MessageConstants.Success.SUCCESSFULLY_GET_ALL_USER)
+                .message("Successfully Get All User")
                 .result(userResponses)
                 .build();
     }
@@ -47,7 +46,7 @@ public class UserController {
 
         return WebResponse.builder()
                 .success(true)
-                .message(MessageConstants.Success.SUCCESSFULLY_GET_PROFILE)
+                .message("Successfully get profile")
                 .result(userProfile)
                 .build();
     }
@@ -63,7 +62,7 @@ public class UserController {
             return ResponseEntity.badRequest().body(
                     WebResponse.builder()
                             .success(false)
-                            .message(MessageConstants.Success.EMAIL_IS_REQUIRED)
+                            .message("Email is required")
                             .build()
             );
         }
@@ -74,7 +73,7 @@ public class UserController {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(
                     WebResponse.builder()
                             .success(false)
-                            .message(MessageConstants.Success.EMAIL_ALREADY_USED_CONFLICT)
+                            .message("Email already used!")
                             .build()
             );
         }
@@ -82,7 +81,7 @@ public class UserController {
         return ResponseEntity.ok(
                 WebResponse.builder()
                         .success(true)
-                        .message(MessageConstants.Success.EMAIL_IS_AVAILABLE)
+                        .message("Email is available")
                         .build()
         );
     }
@@ -94,7 +93,7 @@ public class UserController {
 
         return WebResponse.builder()
                 .success(true)
-                .message(MessageConstants.Success.CERTIFICATE_REQUEST_SUBMITTED)
+                .message("Certificate request submitted successfully")
                 .result(response)
                 .build();
     }
@@ -106,7 +105,7 @@ public class UserController {
 
         return WebResponse.builder()
                 .success(true)
-                .message(MessageConstants.Success.CERTIFICATE_REQUEST_REVIEWED)
+                .message("Certificate request reviewed successfully")
                 .result(response)
                 .build();
     }
@@ -118,8 +117,22 @@ public class UserController {
 
         return WebResponse.builder()
                 .success(true)
-                .message(MessageConstants.Success.CERTIFICATE_REQUEST_DETAIL)
+                .message("Certificate request detail")
                 .result(result)
+                .build();
+    }
+
+    @GetMapping("/certificate/requests")
+    @PreAuthorize("hasRole('ADMIN')")
+    public WebResponse<?> getCertificateRequests(@RequestParam(value = "status", required = false) String status,
+                                                 @RequestParam(value = "cursor", required = false) Long cursor,
+                                                 @RequestParam(value = "limit", defaultValue = "15") int limit) {
+        var results = userService.getCertificateRequests(status, cursor, limit);
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully get certificate requests")
+                .meta(results.getMeta())
+                .result(results.getResult())
                 .build();
     }
 
@@ -132,7 +145,7 @@ public class UserController {
 
         return WebResponse.builder()
                 .success(true)
-                .message(MessageConstants.Success.SUCCESSFULLY_GET_BOOKMARKS)
+                .message("Successfully get bookmarks")
                 .meta(results.getMeta())
                 .result(results.getResult())
                 .build();
@@ -147,7 +160,7 @@ public class UserController {
 
         return WebResponse.builder()
                 .success(true)
-                .message(MessageConstants.Success.SUCCESSFULLY_GET_MY_REVIEWS)
+                .message("Successfully get my reviews")
                 .meta(results.getMeta())
                 .result(results.getResult())
                 .build();
@@ -160,7 +173,7 @@ public class UserController {
 
         return WebResponse.builder()
                 .success(true)
-                .message(MessageConstants.Success.SUCCESSFULLY_GET_MY_CERTIFICATES)
+                .message("Successfully get my certificates")
                 .result(certificates)
                 .build();
     }

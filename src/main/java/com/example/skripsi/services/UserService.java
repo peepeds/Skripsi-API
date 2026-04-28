@@ -4,8 +4,11 @@ import com.example.skripsi.configs.*;
 import com.example.skripsi.entities.*;
 import com.example.skripsi.exceptions.*;
 import com.example.skripsi.interfaces.*;
+import com.example.skripsi.models.CursorPageResponse;
 import com.example.skripsi.models.user.*;
 import com.example.skripsi.models.constant.*;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import com.example.skripsi.repositories.*;
 import com.example.skripsi.securities.*;
 import jakarta.transaction.Transactional;
@@ -31,6 +34,7 @@ public class UserService implements IUserService {
     private final UserNotificationRepository userNotificationRepository;
     private final UserCertificateRequestRepository userCertificateRequestRepository;
     private final AuditService auditService;
+    private final AuditLogRepository auditLogRepository;
     private final UserCertificatesRepository userCertificatesRepository;
     private final MinioConfig minioConfig;
     private final IMinioService minioService;
@@ -43,6 +47,7 @@ public class UserService implements IUserService {
                        UserNotificationRepository userNotificationRepository,
                        UserCertificateRequestRepository userCertificateRequestRepository,
                        @Lazy AuditService auditService,
+                       AuditLogRepository auditLogRepository,
                        UserCertificatesRepository userCertificatesRepository,
                        MinioConfig minioConfig,
                        IMinioService minioService,
@@ -54,6 +59,7 @@ public class UserService implements IUserService {
         this.userNotificationRepository = userNotificationRepository;
         this.userCertificateRequestRepository = userCertificateRequestRepository;
         this.auditService = auditService;
+        this.auditLogRepository = auditLogRepository;
         this.userCertificatesRepository = userCertificatesRepository;
         this.minioConfig = minioConfig;
         this.minioService = minioService;
@@ -341,6 +347,59 @@ public class UserService implements IUserService {
                 .toList();
     }
 
+    @Override
+    public CursorPageResponse<CertificateRequestListResponse> getCertificateRequests(String status, Long cursor, int limit) {
+        log.info("[getCertificateRequests] status={} cursor={} limit={}", status, cursor, limit);
+        Pageable pageable = PageRequest.of(0, limit + 1);
+        List<UserCertificateRequest> requests = status == null
+                ? userCertificateRequestRepository.findPageFromCursor(cursor, pageable)
+                : userCertificateRequestRepository.findPageByStatusFromCursor(status, cursor, pageable);
+
+        boolean hasMore = requests.size() > limit;
+        List<UserCertificateRequest> pageRequests = hasMore ? requests.subList(0, limit) : requests;
+
+        List<CertificateRequestListResponse> items = pageRequests.stream()
+                .map(this::toCertificateRequestListResponse)
+                .collect(Collectors.toList());
+
+        Long nextCursor = hasMore && !items.isEmpty()
+                ? pageRequests.get(pageRequests.size() - 1).getDocumentId()
+                : null;
+
+        return CursorPageResponse.<CertificateRequestListResponse>builder()
+                .result(items)
+                .meta(CursorPageResponse.Meta.builder()
+                        .nextCursor(nextCursor)
+                        .previousCursor(cursor)
+                        .size(items.size())
+                        .hasMore(hasMore)
+                        .build())
+                .build();
+    }
+
+    private CertificateRequestListResponse toCertificateRequestListResponse(UserCertificateRequest req) {
+        boolean isReviewed = req.getUploadedAt() != null;
+        Notification notification = req.getNotification();
+
+        AuditLog reviewLog = auditLogRepository
+                .findTopByEntityTypeAndEntityIdAndActionInOrderByTimestampDesc(
+                        EntityTypeConstants.UPLOAD_CERTIFICATES,
+                        req.getDocumentId(),
+                        List.of(ActionConstants.APPROVED, ActionConstants.REJECTED))
+                .orElse(null);
+
+        return CertificateRequestListResponse.builder()
+                .requestId(req.getDocumentId())
+                .certificateName(req.getDocumentName())
+                .status(req.getStatus())
+                .createdAt(req.getCreatedAt())
+                .submittedBy(resolveUserName(req.getCreatedBy()))
+                .reviewedAt(isReviewed ? req.getUploadedAt() : null)
+                .reviewedBy(isReviewed && notification != null ? resolveUserName(notification.getActorId()) : null)
+                .reviewNote(reviewLog != null ? reviewLog.getNotes() : null)
+                .build();
+    }
+
     private UserResponse toResponse(User user, UserProfile profile) {
         var roleName = user.getRoles().stream()
                 .findFirst()
@@ -432,6 +491,16 @@ public class UserService implements IUserService {
             log.warn("[getCertificateRequestDetail] failed to generate presigned url for requestId={}", userCertificateRequest.getDocumentId(), e);
             documentUrl = buildMinioProxyUrl(userCertificateRequest.getDocumentUrl());
         }
+
+        AuditLog reviewLog = auditLogRepository
+                .findTopByEntityTypeAndEntityIdAndActionInOrderByTimestampDesc(
+                        EntityTypeConstants.UPLOAD_CERTIFICATES,
+                        userCertificateRequest.getDocumentId(),
+                        List.of(ActionConstants.APPROVED, ActionConstants.REJECTED))
+                .orElse(null);
+
+        boolean isReviewed = userCertificateRequest.getUploadedAt() != null;
+
         return CertificateRequestDetailResponse.builder()
                 .requestDetails(CertificateRequestDetailResponse.RequestDetails.builder()
                         .requestId(userCertificateRequest.getDocumentId())
@@ -443,9 +512,9 @@ public class UserService implements IUserService {
                         .build())
                 .reviewInformation(CertificateRequestDetailResponse.ReviewInformation.builder()
                         .status(userCertificateRequest.getStatus())
-                        .reviewedAt(userCertificateRequest.getUploadedAt())
-                        .reviewNote(null)
-                        .reviewedBy(userCertificateRequest.getUploadedAt() != null ? resolveUserName(notification.getActorId()) : null)
+                        .reviewedAt(isReviewed ? userCertificateRequest.getUploadedAt() : null)
+                        .reviewedBy(isReviewed ? resolveUserName(notification.getActorId()) : null)
+                        .reviewNote(reviewLog != null ? reviewLog.getNotes() : null)
                         .build())
                 .build();
     }

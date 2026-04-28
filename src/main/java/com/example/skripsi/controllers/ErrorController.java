@@ -2,7 +2,6 @@ package com.example.skripsi.controllers;
 
 import com.example.skripsi.exceptions.*;
 import com.example.skripsi.models.*;
-import com.example.skripsi.models.constant.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -25,7 +24,7 @@ public class ErrorController {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(WebResponse.<String>builder()
                         .success(false)
-                        .message(MessageConstants.NotFound.ACCESS_DENIED_NOT_FOUND)
+                        .message("Not Found")
                         .build());
     }
 
@@ -35,7 +34,7 @@ public class ErrorController {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(WebResponse.<String>builder()
                         .success(false)
-                        .message(MessageConstants.NotFound.ACCESS_DENIED)
+                        .message("Access Denied")
                         .build());
     }
 
@@ -45,7 +44,7 @@ public class ErrorController {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(WebResponse.<String>builder()
                         .success(false)
-                        .message(MessageConstants.NotFound.ACCESS_DENIED)
+                        .message("Access Denied")
                         .build());
     }
 
@@ -130,14 +129,14 @@ public class ErrorController {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(WebResponse.builder()
                         .success(false)
-                        .message(MessageConstants.Async.ASYNC_OPERATION_FAILED + causeMsg)
+                        .message("Async operation failed: " + causeMsg)
                         .build());
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<WebResponse<?>> handleGeneralException(Exception ex){
         log.error("Unhandled exception", ex);
-        String message = ex.getMessage() != null ? ex.getMessage() : MessageConstants.Error.INTERNAL_SERVER_ERROR;
+        String message = ex.getMessage() != null ? ex.getMessage() : "An unexpected error occurred. Please try again later.";
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(WebResponse.builder()
                         .success(false)
