@@ -22,7 +22,7 @@ public class CompanyController {
     }
 
     @GetMapping("")
-    public WebResponse<?> getCompanies(@RequestParam(value = "cursor", required = false) Long cursor,
+    public WebResponse<?> xgetCompanies(@RequestParam(value = "cursor", required = false) Long cursor,
                                        @RequestParam(value = "limit", required = false) Integer limit,
                                        @RequestParam(value = "search", required = false) String search,
                                        @RequestParam(value = "sort", required = false) String sort) {

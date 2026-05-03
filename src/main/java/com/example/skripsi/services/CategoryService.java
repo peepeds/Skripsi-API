@@ -178,4 +178,5 @@ public class CategoryService implements ICategoryService {
                 .totalPartnerCompanies(totalPartnerCompanies)
                 .build();
     }
+
 }

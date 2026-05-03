@@ -49,7 +49,6 @@ public class SecurityConfig {
                         .requestMatchers(SecurityConstants.PUBLIC_PATHS).permitAll()
 
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/**").permitAll()
 
                         .anyRequest().authenticated()
                 )

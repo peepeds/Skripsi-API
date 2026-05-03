@@ -72,11 +72,11 @@ public class UserService implements IUserService {
         log.info("[getAllUserByUserPrivilege] userId={}", userId);
 
         var privilegeLevel = userRepository.getUserPrivilege(userId)
+                .map(String::toLowerCase)
                 .orElseThrow(() -> {
                     log.warn("[getAllUserByUserPrivilege] no privilege found userId={}", userId);
                     return new CustomAccessDeniedException("Insufficient privileges");
-                })
-                .toLowerCase();
+                });
 
         log.info("[getAllUserByUserPrivilege] userId={} privilegeLevel={}", userId, privilegeLevel);
         var users = userRepository.getUserByUserPrivilege(privilegeLevel, userId);
@@ -89,8 +89,8 @@ public class UserService implements IUserService {
         var userProfiles = userProfileRepository.findAllByUser_UserIdIn(userIds);
         var profileMap = userProfiles.stream()
                 .collect(Collectors.toMap(
-                        p -> p.getUser().getUserId(), // key
-                        p -> p, // values
+                        p -> p.getUser().getUserId(),
+                        p -> p,
                         (existing, replacement) -> existing
                 ));
 
@@ -430,6 +430,8 @@ public class UserService implements IUserService {
                 .orElse(null);
 
         return UserResponse.builder()
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
                 .fullName("%s %s".formatted(
                         user.getFirstName(),
                         Optional.ofNullable(user.getLastName()).orElse("").trim()
@@ -458,6 +460,10 @@ public class UserService implements IUserService {
         return UserResponse.builder()
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
+                .fullName("%s %s".formatted(
+                        user.getFirstName(),
+                        Optional.ofNullable(user.getLastName()).orElse("").trim()
+                ))
                 .email(user.getEmail())
                 .phoneNumber(userProfile.getPhoneNumber())
                 .role(roleName)
@@ -518,4 +524,5 @@ public class UserService implements IUserService {
                         .build())
                 .build();
     }
+
 }
