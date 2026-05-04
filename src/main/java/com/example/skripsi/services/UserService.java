@@ -15,11 +15,13 @@ import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
+import org.springframework.security.crypto.bcrypt.BCrypt;
 
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 
@@ -39,6 +41,7 @@ public class UserService implements IUserService {
     private final MinioConfig minioConfig;
     private final IMinioService minioService;
     private final CompanyRepository companyRepository;
+        private final RoleRepository roleRepository;
 
     public UserService(UserRepository userRepository,
                        UserProfileRepository userProfileRepository,
@@ -51,7 +54,8 @@ public class UserService implements IUserService {
                        UserCertificatesRepository userCertificatesRepository,
                        MinioConfig minioConfig,
                        IMinioService minioService,
-                       CompanyRepository companyRepository){
+                       CompanyRepository companyRepository,
+                       RoleRepository roleRepository){
         this.userProfileRepository = userProfileRepository;
         this.userRepository = userRepository;
         this.securityUtils = securityUtils;
@@ -64,6 +68,7 @@ public class UserService implements IUserService {
         this.minioConfig = minioConfig;
         this.minioService = minioService;
         this.companyRepository = companyRepository;
+        this.roleRepository = roleRepository;
     }
 
     @Override
@@ -79,6 +84,10 @@ public class UserService implements IUserService {
         var users = "admin".equalsIgnoreCase(privilegeLevel)
                 ? userRepository.findAll()
                 : userRepository.getUserByUserPrivilege(privilegeLevel, userId);
+
+        users = users.stream()
+                .filter(user -> !Boolean.TRUE.equals(user.getIsDeleted()))
+                .toList();
 
         if (users.isEmpty()) {
             return List.of();
@@ -100,6 +109,77 @@ public class UserService implements IUserService {
 
     public Boolean emailExists(String email){
         return userRepository.findByEmail(email).isPresent();
+    }
+
+    @Override
+    public UserResponse createUserByAdmin(CreateUserRequest request) {
+        String email = request.getEmail().toLowerCase();
+        validateAdminEmail(email);
+        if (emailExists(email)) {
+            throw new BadRequestExceptions(MessageConstants.Auth.EMAIL_ALREADY_USED);
+        }
+
+        Role role = resolveRole(request.getRole());
+        validateAdminPassword(request.getPassword());
+
+        User user = User.builder()
+                .firstName(request.getFirstName())
+                .lastName(request.getLastName())
+                .email(email)
+                .password(BCrypt.hashpw(request.getPassword(), BCrypt.gensalt()))
+                .createdAt(OffsetDateTime.now())
+                .isDeleted(false)
+                .roles(java.util.Set.of(role))
+                .build();
+
+        return toResponse(userRepository.save(user), null);
+    }
+
+    @Override
+    public UserResponse updateUserByAdmin(Long userId, UpdateUserRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        if (Boolean.TRUE.equals(user.getIsDeleted())) {
+            throw new ResourceNotFoundException("User not found");
+        }
+
+        String email = request.getEmail().toLowerCase();
+        validateAdminEmail(email);
+        userRepository.findByEmail(email)
+                .ifPresent(existing -> {
+                    if (!existing.getUserId().equals(userId)) {
+                        throw new BadRequestExceptions(MessageConstants.Auth.EMAIL_ALREADY_USED);
+                    }
+                });
+
+        user.setFirstName(request.getFirstName());
+        user.setLastName(request.getLastName());
+        user.setEmail(email);
+        user.setUpdatedAt(OffsetDateTime.now());
+
+        if (request.getPassword() != null && !request.getPassword().isBlank()) {
+            validateAdminPassword(request.getPassword());
+            user.setPassword(BCrypt.hashpw(request.getPassword(), BCrypt.gensalt()));
+        }
+
+        user.setRoles(java.util.Set.of(resolveRole(request.getRole())));
+
+        return toResponse(userRepository.save(user), null);
+    }
+
+    @Override
+    public UserResponse deleteUserByAdmin(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        if (Boolean.TRUE.equals(user.getIsDeleted())) {
+            throw new ResourceNotFoundException("User not found");
+        }
+
+        user.setIsDeleted(true);
+        user.setUpdatedAt(OffsetDateTime.now());
+        return toResponse(userRepository.save(user), null);
     }
 
     @Override
@@ -431,6 +511,7 @@ public class UserService implements IUserService {
                 .orElse(null);
 
         return UserResponse.builder()
+                .userId(user.getUserId())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
                 .fullName("%s %s".formatted(
@@ -461,6 +542,7 @@ public class UserService implements IUserService {
         var deptName = major != null && major.getDepartment() != null ? major.getDepartment().getDeptName() : null;
 
         return UserResponse.builder()
+                .userId(user.getUserId())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
                 .fullName("%s %s".formatted(
@@ -475,6 +557,39 @@ public class UserService implements IUserService {
                 .majorName(major != null ? major.getMajorName() : null)
                 .build();
     }
+
+        private Role resolveRole(String roleName) {
+                String normalizedRole = roleName == null ? "USER" : roleName.trim();
+                return roleRepository.findByRoleNameIgnoreCase(normalizedRole)
+                                .orElseGet(() -> {
+                                        Role newRole = Role.builder()
+                                                        .roleName(normalizedRole)
+                                                        .createdAt(OffsetDateTime.now())
+                                                        .build();
+                                        return roleRepository.save(newRole);
+                                });
+        }
+
+        private void validateAdminEmail(String email) {
+                if (email == null || email.isBlank()) {
+                        throw new BadRequestExceptions(MessageConstants.Success.EMAIL_IS_REQUIRED);
+                }
+
+                if (!email.contains("@") || !email.toLowerCase().endsWith(".com")) {
+                        throw new BadRequestExceptions("Invalid email address");
+                }
+        }
+
+        private void validateAdminPassword(String password) {
+                if (password == null || password.isBlank()) {
+                        throw new BadRequestExceptions("Password is required");
+                }
+
+                String passwordPattern = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^a-zA-Z0-9]).{8,}$";
+                if (!Pattern.matches(passwordPattern, password)) {
+                        throw new BadRequestExceptions("Password must contain lowercase, uppercase, number, and special char");
+                }
+        }
 
     private String buildMinioProxyUrl(String certificatesUrl) {
         return minioConfig.getProxyEndpoint() + "/" + certificatesUrl;

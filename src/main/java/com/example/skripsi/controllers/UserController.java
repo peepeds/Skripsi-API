@@ -2,9 +2,9 @@ package com.example.skripsi.controllers;
 
 import com.example.skripsi.interfaces.ICompanyService;
 import com.example.skripsi.interfaces.IReviewService;
-import com.example.skripsi.models.*;
 import com.example.skripsi.models.user.*;
 import com.example.skripsi.services.*;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -32,6 +32,27 @@ public class UserController {
         var userResponses = userService.getAllUserByUserPrivilege();
 
                 return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", userResponses));
+    }
+
+    @PostMapping("")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> createUser(@Valid @RequestBody CreateUserRequest request) {
+        var result = userService.createUserByAdmin(request);
+        return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", result));
+    }
+
+    @PatchMapping("/{userId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> updateUser(@PathVariable Long userId, @Valid @RequestBody UpdateUserRequest request) {
+        var result = userService.updateUserByAdmin(userId, request);
+        return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", result));
+    }
+
+    @DeleteMapping("/{userId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> deleteUser(@PathVariable Long userId) {
+        var result = userService.deleteUserByAdmin(userId);
+        return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", result));
     }
 
     @GetMapping("/me")

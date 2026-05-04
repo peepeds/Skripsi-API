@@ -40,6 +40,9 @@ public class User {
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
 
+    @Column(name = "is_deleted")
+    private Boolean isDeleted;
+
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
             name = "user_roles", // nama tabel penghubung
