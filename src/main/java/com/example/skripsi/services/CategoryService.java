@@ -10,6 +10,7 @@ import com.example.skripsi.models.constant.*;
 import com.example.skripsi.repositories.*;
 import com.example.skripsi.repositories.projections.SubCategorySummaryProjection;
 import com.example.skripsi.interfaces.*;
+import jakarta.transaction.Transactional;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import java.net.URLEncoder;
@@ -19,6 +20,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
+@Transactional
 public class CategoryService implements ICategoryService {
     private final CategoryRepository categoryRepository;
     private final SubCategoryRepository subCategoryRepository;
@@ -47,10 +49,11 @@ public class CategoryService implements ICategoryService {
     }
 
     public List<Category> getCategories(boolean includeSubCategories, String categoryType) {
+        String normalizedType = normalizeCategoryType(categoryType);
         if (includeSubCategories) {
-            return categoryRepository.findByCategoryTypeWithSubCategories(categoryType);
+            return categoryRepository.findByCategoryTypeWithSubCategories(normalizedType);
         } else {
-            return categoryRepository.findByCategoryType(categoryType);
+            return categoryRepository.findByCategoryType(normalizedType);
         }
     }
 
@@ -106,6 +109,18 @@ public class CategoryService implements ICategoryService {
                 ));
     }
 
+        @Override
+        public Map<Long, String> getSubCategoryCategoryNameMap(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) return Map.of();
+        return subCategoryRepository.findBySubCategoryIds(ids).stream()
+            .filter(sub -> sub.getCategory() != null)
+            .collect(Collectors.toMap(
+                SubCategory::getSubCategoryId,
+                sub -> sub.getCategory().getCategoryName(),
+                (existing, replacement) -> existing
+            ));
+        }
+
     @Override
     public List<TopSubCategoryResponse> getTopSubCategories() {
         return subCategoryRepository.findTop10SubCategoryNames().stream()
@@ -125,6 +140,8 @@ public class CategoryService implements ICategoryService {
                     .map(sub -> SubCategoryResponse.builder()
                             .subCategoryId(sub.getSubCategoryId())
                             .subCategoryName(sub.getSubCategoryName())
+                    .categoryId(category.getCategoryId())
+                    .categoryName(category.getCategoryName())
                             .build())
                     .collect(Collectors.toList());
         }
@@ -178,5 +195,190 @@ public class CategoryService implements ICategoryService {
                 .totalPartnerCompanies(totalPartnerCompanies)
                 .build();
     }
+
+    // Master Data CRUD methods
+    public CategoryResponse createCategoryMasterData(CreateCategoryRequest request) {
+        String categoryType = normalizeCategoryType(request.getCategoryType());
+        Category category = Category.builder()
+                .categoryName(request.getCategoryName())
+            .categoryType(categoryType)
+                .build();
+
+        Category savedCategory = categoryRepository.save(category);
+
+        return CategoryResponse.builder()
+                .categoryId(savedCategory.getCategoryId())
+                .categoryName(savedCategory.getCategoryName())
+                .categoryType(savedCategory.getCategoryType())
+                .build();
+    }
+
+    public CategoryResponse updateCategoryMasterData(Integer id, UpdateCategoryRequest request) {
+        Category category = categoryRepository.findById(Long.valueOf(id))
+                .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
+
+        if (request.getCategoryName() != null) {
+            category.setCategoryName(request.getCategoryName());
+        }
+        if (request.getCategoryType() != null) {
+            category.setCategoryType(normalizeCategoryType(request.getCategoryType()));
+        }
+
+        Category savedCategory = categoryRepository.save(category);
+
+        return CategoryResponse.builder()
+                .categoryId(savedCategory.getCategoryId())
+                .categoryName(savedCategory.getCategoryName())
+                .categoryType(savedCategory.getCategoryType())
+                .build();
+    }
+
+    public CategoryResponse deleteCategoryMasterData(Integer id, java.util.Map<String, Object> body) {
+        Category category = categoryRepository.findById(Long.valueOf(id))
+                .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
+
+        if (softDeleteEntity(category)) {
+            categoryRepository.save(category);
+        } else {
+            categoryRepository.delete(category);
+        }
+
+        return CategoryResponse.builder()
+                .categoryId(category.getCategoryId())
+                .categoryName(category.getCategoryName())
+                .categoryType(category.getCategoryType())
+                .build();
+    }
+
+    public List<SubCategoryResponse> getAllSubCategories() {
+        List<SubCategory> subCategories = subCategoryRepository.findAllWithCategory();
+        return subCategories.stream()
+                .map(this::toSubCategoryResponse)
+                .collect(Collectors.toList());
+    }
+
+    public SubCategoryResponse createSubCategoryMasterData(Map<String, Object> request) {
+        String subCategoryName = requireString(request, "subCategoryName", "Subcategory name is required");
+        Long categoryId = requireLong(request, "categoryId", "Category is required");
+
+        Category category = categoryRepository.findById(categoryId)
+                .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
+
+        SubCategory savedSubCategory = subCategoryRepository.save(SubCategory.builder()
+                .subCategoryName(subCategoryName)
+                .category(category)
+                .build());
+
+        return toSubCategoryResponse(savedSubCategory);
+    }
+
+    public SubCategoryResponse updateSubCategoryMasterData(Long id, Map<String, Object> request) {
+        SubCategory subCategory = subCategoryRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("SubCategory not found"));
+
+        if (request.containsKey("subCategoryName")) {
+            String subCategoryName = stringValue(request.get("subCategoryName"));
+            if (subCategoryName != null && !subCategoryName.trim().isEmpty()) {
+                subCategory.setSubCategoryName(subCategoryName.trim());
+            }
+        }
+
+        if (request.containsKey("categoryId")) {
+            Long categoryId = longValue(request.get("categoryId"));
+            if (categoryId == null) {
+                throw new BadRequestExceptions("Category is required");
+            }
+            Category category = categoryRepository.findById(categoryId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
+            subCategory.setCategory(category);
+        }
+
+        SubCategory savedSubCategory = subCategoryRepository.save(subCategory);
+        return toSubCategoryResponse(savedSubCategory);
+    }
+
+    public SubCategoryResponse deleteSubCategoryMasterData(Long id, Map<String, Object> body) {
+        SubCategory subCategory = subCategoryRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("SubCategory not found"));
+
+        subCategoryRepository.delete(subCategory);
+        return toSubCategoryResponse(subCategory);
+    }
+
+    private SubCategoryResponse toSubCategoryResponse(SubCategory subCategory) {
+        return SubCategoryResponse.builder()
+                .subCategoryId(subCategory.getSubCategoryId())
+                .subCategoryName(subCategory.getSubCategoryName())
+                .categoryId(subCategory.getCategory() != null ? subCategory.getCategory().getCategoryId() : null)
+                .categoryName(subCategory.getCategory() != null ? subCategory.getCategory().getCategoryName() : null)
+                .build();
+    }
+
+    private String normalizeCategoryType(String categoryType) {
+        String normalized = categoryType == null ? "" : categoryType.trim().toLowerCase();
+
+        if (normalized.isEmpty()) {
+            return TypeConstants.COMPANIES;
+        }
+
+        if (!TypeConstants.COMPANIES.equals(normalized) && !TypeConstants.JOBS.equals(normalized)) {
+            throw new BadRequestExceptions(MessageConstants.Validation.INVALID_TYPE_COMPANIES_OR_JOBS);
+        }
+
+        return normalized;
+    }
+
+    private String requireString(Map<String, Object> request, String key, String message) {
+        String value = stringValue(request != null ? request.get(key) : null);
+        if (value == null || value.trim().isEmpty()) {
+            throw new BadRequestExceptions(message);
+        }
+        return value.trim();
+    }
+
+    private Long requireLong(Map<String, Object> request, String key, String message) {
+        Long value = longValue(request != null ? request.get(key) : null);
+        if (value == null) {
+            throw new BadRequestExceptions(message);
+        }
+        return value;
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private Long longValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+
+        try {
+            return Long.valueOf(String.valueOf(value));
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private boolean softDeleteEntity(Category category) {
+        try {
+            category.getClass().getMethod("setIsDeleted", Boolean.class).invoke(category, true);
+            return true;
+        } catch (NoSuchMethodException ignored) {
+            try {
+                category.getClass().getMethod("setIsDeleted", boolean.class).invoke(category, true);
+                return true;
+            } catch (Exception ignoredAgain) {
+                return false;
+            }
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
 
 }

@@ -16,6 +16,9 @@ public interface SubCategoryRepository extends JpaRepository<SubCategory, Long> 
     @Query("SELECT sc FROM SubCategory sc JOIN FETCH sc.category WHERE sc.subCategoryId IN :subCategoryIds")
     List<SubCategory> findBySubCategoryIds(@Param("subCategoryIds") List<Long> subCategoryIds);
 
+    @Query("SELECT sc FROM SubCategory sc JOIN FETCH sc.category")
+    List<SubCategory> findAllWithCategory();
+
     @Query(value = """
             SELECT sc.sub_category_name AS subCategoryName, COUNT(*) AS totalReviews
             FROM internship_job_subcategories ijsc

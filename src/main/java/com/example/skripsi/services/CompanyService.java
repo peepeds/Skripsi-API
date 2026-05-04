@@ -33,6 +33,7 @@ public class CompanyService implements ICompanyService {
     private final CompanyRequestRepository companyRequestRepository;
     private final CompanyProfileRepository companyProfileRepository;
     private final CompanySaveRepository companySaveRepository;
+    private final SubCategoryRepository subCategoryRepository;
     private final AuditService auditService;
     private final SecurityUtils securityUtils;
     private final IUserService userService;
@@ -48,6 +49,7 @@ public class CompanyService implements ICompanyService {
                           IUserService userService,
                           CompanyProfileRepository companyProfileRepository,
                           CompanySaveRepository companySaveRepository,
+                          SubCategoryRepository subCategoryRepository,
                           @Lazy ICategoryService categoryService,
                           @Lazy IReviewService reviewService,
                           NotificationHelper notificationHelper,
@@ -59,6 +61,7 @@ public class CompanyService implements ICompanyService {
         this.userService = userService;
         this.companyProfileRepository = companyProfileRepository;
         this.companySaveRepository = companySaveRepository;
+        this.subCategoryRepository = subCategoryRepository;
         this.categoryService = categoryService;
         this.userProfileRepository = userProfileRepository;
         this.reviewService = reviewService;
@@ -70,15 +73,18 @@ public class CompanyService implements ICompanyService {
         final Map<Long, Long> reviewCountMap;
         final Map<Long, CompanyProfile> profileMap;
         final Map<Long, String> subcategoryNameMap;
+        final Map<Long, String> categoryNameMap;
 
         CompanyEnrichmentData(Map<Long, Double> ratingMap,
                               Map<Long, Long> reviewCountMap,
                               Map<Long, CompanyProfile> profileMap,
-                              Map<Long, String> subcategoryNameMap) {
+                              Map<Long, String> subcategoryNameMap,
+                              Map<Long, String> categoryNameMap) {
             this.ratingMap = ratingMap;
             this.reviewCountMap = reviewCountMap;
             this.profileMap = profileMap;
             this.subcategoryNameMap = subcategoryNameMap;
+            this.categoryNameMap = categoryNameMap;
         }
     }
 
@@ -438,7 +444,7 @@ public class CompanyService implements ICompanyService {
 
     private CompanyEnrichmentData fetchEnrichmentData(List<Long> companyIds) {
         if (companyIds.isEmpty()) {
-            return new CompanyEnrichmentData(new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>());
+            return new CompanyEnrichmentData(new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>());
         }
 
         Map<Long, Double> ratingMap = reviewService.getRatingsByCompanyIds(companyIds);
@@ -457,8 +463,9 @@ public class CompanyService implements ICompanyService {
                 .collect(Collectors.toList());
 
         Map<Long, String> subcategoryNameMap = categoryService.getSubCategoryNameMap(subcategoryIds);
+        Map<Long, String> categoryNameMap = categoryService.getSubCategoryCategoryNameMap(subcategoryIds);
 
-        return new CompanyEnrichmentData(ratingMap, reviewCountMap, profileMap, subcategoryNameMap);
+        return new CompanyEnrichmentData(ratingMap, reviewCountMap, profileMap, subcategoryNameMap, categoryNameMap);
     }
 
     private void validateCompanyRequestNotFinalized(CompanyRequest companyRequest) {
@@ -470,20 +477,44 @@ public class CompanyService implements ICompanyService {
     }
 
     private void createApprovedCompany(CompanyRequest companyRequest, Long reviewerId) {
-        Company savedCompany = companyRepository.save(Company.builder()
+        String slug = generateSlug(companyRequest.getCompanyName());
+        SubCategory subCategory = companyRequest.getSubcategoryId() == null
+                ? null
+                : subCategoryRepository.findById(companyRequest.getSubcategoryId())
+                .orElseThrow(() -> new ResourceNotFoundException("SubCategory not found"));
+
+        if (subCategory == null || subCategory.getCategory() == null) {
+            throw new ResourceNotFoundException("Category not found");
+        }
+
+        Company company = companyRepository.findByCompanySlug(slug);
+
+        if (company == null) {
+            company = createCompany(Company.builder()
                 .companyName(companyRequest.getCompanyName())
                 .companyAbbreviation(companyRequest.getCompanyAbbreviation())
+                .companySlug(slug)
                 .createdBy(reviewerId)
+                .createdAt(OffsetDateTime.now())
                 .build());
-        companyProfileRepository.save(CompanyProfile.builder()
-                .companyId(savedCompany.getCompanyId())
-                .website(companyRequest.getWebsite())
-                .bio(companyRequest.getBio())
-                .isPartner(false)
-                .subcategoryId(companyRequest.getSubcategoryId())
+        }
+
+        CompanyProfile profile = companyProfileRepository.findByCompanyId(company.getCompanyId());
+        if (profile == null) {
+            profile = CompanyProfile.builder()
+                .companyId(company.getCompanyId())
                 .createdAt(OffsetDateTime.now())
                 .createdBy(reviewerId)
-                .build());
+                .build();
+        }
+
+        profile.setWebsite(companyRequest.getWebsite());
+        profile.setBio(companyRequest.getBio());
+        profile.setIsPartner(Boolean.FALSE);
+        profile.setSubcategoryId(subCategory.getSubCategoryId());
+        profile.setUpdatedAt(OffsetDateTime.now());
+        profile.setUpdatedBy(reviewerId);
+        companyProfileRepository.save(profile);
     }
 
     private void updateCompanyRequestStatus(CompanyRequest companyRequest,
@@ -554,6 +585,9 @@ public class CompanyService implements ICompanyService {
         String subcategoryName = (profile != null && profile.getSubcategoryId() != null)
                 ? enrichment.subcategoryNameMap.get(profile.getSubcategoryId())
                 : null;
+        String categoryName = (profile != null && profile.getSubcategoryId() != null)
+            ? enrichment.categoryNameMap.get(profile.getSubcategoryId())
+            : null;
 
         Long totalReviews = enrichment.reviewCountMap.getOrDefault(company.getCompanyId(), 0L);
 
@@ -561,13 +595,15 @@ public class CompanyService implements ICompanyService {
                 .companyId(company.getCompanyId())
                 .companyName(company.getCompanyName())
                 .companyAbbreviation(company.getCompanyAbbreviation())
-                .website(profile != null ? profile.getWebsite() : null)
+                .website(profile != null && profile.getWebsite() != null ? profile.getWebsite() : "")
                 .bio(profile != null ? profile.getBio() : null)
                 .isPartner(profile != null ? profile.getIsPartner() : null)
+                .categoryName(categoryName != null ? categoryName : "")
                 .subcategoryName(subcategoryName)
                 .companySlug(company.getCompanySlug())
                 .rating(enrichment.ratingMap.get(company.getCompanyId()))
                 .totalReviews(totalReviews)
+                .reviewCount(totalReviews != null ? totalReviews : 0L)
                 .build();
     }
 
@@ -628,5 +664,87 @@ public class CompanyService implements ICompanyService {
                         .reviewedAt(companyRequest.getReviewedAt())
                         .build())
                 .build();
+    }
+
+    // Master Data CRUD methods
+    @Transactional
+    public Company createCompany(Company company) {
+        return companyRepository.save(company);
+    }
+
+    public CompanyResponse createCompanyMasterData(CreateCompanyRequest request) {
+        Company savedCompany = createCompany(Company.builder()
+                .companyName(request.getCompanyName())
+                .companyAbbreviation(request.getCompanyAbbreviation())
+                .companySlug(generateSlug(request.getCompanyName()))
+                .createdAt(OffsetDateTime.now())
+                .createdBy(securityUtils.getCurrentUserId())
+                .build());
+
+        return CompanyResponse.builder()
+                .companyId(savedCompany.getCompanyId())
+                .companyName(savedCompany.getCompanyName())
+                .companyAbbreviation(savedCompany.getCompanyAbbreviation())
+                .companySlug(savedCompany.getCompanySlug())
+                .build();
+    }
+
+    public CompanyResponse updateCompanyMasterData(Integer id, UpdateCompanyRequest request) {
+        Company company = companyRepository.findById((long) id)
+                .orElseThrow(() -> new ResourceNotFoundException("Company not found"));
+
+        if (request.getCompanyName() != null) {
+            company.setCompanyName(request.getCompanyName());
+        }
+        if (request.getCompanyAbbreviation() != null) {
+            company.setCompanyAbbreviation(request.getCompanyAbbreviation());
+        }
+
+        Company savedCompany = companyRepository.save(company);
+
+        return CompanyResponse.builder()
+                .companyId(savedCompany.getCompanyId())
+                .companyName(savedCompany.getCompanyName())
+                .companyAbbreviation(savedCompany.getCompanyAbbreviation())
+                .companySlug(savedCompany.getCompanySlug())
+                .build();
+    }
+
+    public CompanyResponse deleteCompanyMasterData(Integer id, java.util.Map<String, Object> body) {
+        Company company = companyRepository.findById((long) id)
+                .orElseThrow(() -> new ResourceNotFoundException("Company not found"));
+
+        if (!softDeleteEntity(company)) {
+            companyRepository.delete(company);
+        } else {
+            companyRepository.save(company);
+        }
+
+        return CompanyResponse.builder()
+                .companyId(company.getCompanyId())
+                .companyName(company.getCompanyName())
+                .companyAbbreviation(company.getCompanyAbbreviation())
+                .companySlug(company.getCompanySlug())
+                .build();
+    }
+
+    private String generateSlug(String name) {
+        return name.toLowerCase().replaceAll("\\s+", "-").replaceAll("[^a-z0-9-]", "");
+    }
+
+    private boolean softDeleteEntity(Company company) {
+        try {
+            company.getClass().getMethod("setIsDeleted", Boolean.class).invoke(company, true);
+            return true;
+        } catch (NoSuchMethodException ignored) {
+            try {
+                company.getClass().getMethod("setIsDeleted", boolean.class).invoke(company, true);
+                return true;
+            } catch (Exception ignoredAgain) {
+                return false;
+            }
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 }

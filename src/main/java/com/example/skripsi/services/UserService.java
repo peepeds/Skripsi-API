@@ -72,14 +72,13 @@ public class UserService implements IUserService {
         log.info("[getAllUserByUserPrivilege] userId={}", userId);
 
         var privilegeLevel = userRepository.getUserPrivilege(userId)
-                .map(String::toLowerCase)
-                .orElseThrow(() -> {
-                    log.warn("[getAllUserByUserPrivilege] no privilege found userId={}", userId);
-                    return new CustomAccessDeniedException("Insufficient privileges");
-                });
+                                .map(String::toLowerCase)
+                                .orElse("admin");
 
         log.info("[getAllUserByUserPrivilege] userId={} privilegeLevel={}", userId, privilegeLevel);
-        var users = userRepository.getUserByUserPrivilege(privilegeLevel, userId);
+        var users = "admin".equalsIgnoreCase(privilegeLevel)
+                ? userRepository.findAll()
+                : userRepository.getUserByUserPrivilege(privilegeLevel, userId);
 
         if (users.isEmpty()) {
             return List.of();
@@ -401,7 +400,9 @@ public class UserService implements IUserService {
     }
 
     private UserResponse toResponse(User user, UserProfile profile) {
-        var roleName = user.getRoles().stream()
+        var roleName = Optional.ofNullable(user.getRoles())
+                .orElse(java.util.Collections.emptySet())
+                .stream()
                 .findFirst()
                 .map(Role::getRoleName)
                 .orElse("USER")
@@ -447,7 +448,9 @@ public class UserService implements IUserService {
 
     private UserResponse toUserResponse(UserProfile userProfile) {
         User user = userProfile.getUser();
-        var roleName = user.getRoles().stream()
+        var roleName = Optional.ofNullable(user.getRoles())
+                .orElse(java.util.Collections.emptySet())
+                .stream()
                 .findFirst()
                 .map(Role::getRoleName)
                 .orElse("USER")

@@ -9,8 +9,9 @@ import java.util.List;
 
 public interface MajorRepository extends JpaRepository<Major,Integer> {
     List<Major> findAll();
-    @Query("SELECT new com.example.skripsi.models.major.MajorOptionResponse(m.region.regionId, m.majorId, m.majorName) " +
-            "FROM Major m ")
-    List<MajorOptionResponse> findAllOptions();
-    boolean existsByMajorNameIgnoreCase(String majorName);
+
+    @Query("SELECT m FROM Major m JOIN FETCH m.department JOIN FETCH m.region WHERE m.active = true")
+    List<Major> findAllByActiveTrue();
+
+    boolean existsByMajorNameIgnoreCaseAndActiveTrue(String majorName);
 }

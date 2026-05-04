@@ -1,5 +1,6 @@
 package com.example.skripsi.controllers;
 
+import com.example.skripsi.models.WebResponse;
 import com.example.skripsi.models.department.*;
 import com.example.skripsi.services.DepartmentService;
 import org.springframework.web.bind.annotation.*;
@@ -10,6 +11,16 @@ public class DepartmentController extends AbstractMasterDataController<Departmen
 
     public DepartmentController(DepartmentService departmentService) {
         super(departmentService);
+    }
+
+    @GetMapping("/options")
+    public WebResponse<?> getAllDepartmentOptions() {
+        var results = service.getAllDepartment();
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully Get Departments")
+                .result(results)
+                .build();
     }
 
     @Override

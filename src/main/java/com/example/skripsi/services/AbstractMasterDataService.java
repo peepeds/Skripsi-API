@@ -33,6 +33,14 @@ public abstract class AbstractMasterDataService<Entity, Response, CreateRequest,
             return List.of();
         }
 
+        entities = entities.stream()
+                .filter(this::isVisibleEntity)
+                .collect(Collectors.toList());
+
+        if (entities.isEmpty()) {
+            return List.of();
+        }
+
         List<Long> userIds = extractUserIds(entities);
         Map<Long, String> userNameMap = userIds.isEmpty()
                 ? new HashMap<>()
@@ -66,6 +74,62 @@ public abstract class AbstractMasterDataService<Entity, Response, CreateRequest,
         Entity savedEntity = repository.save(entity);
 
         return toResponse(savedEntity, new HashMap<>());
+    }
+
+    public Response delete(Integer id, Map<String, Object> body) {
+        Entity entity = repository.findById(id)
+                .orElseThrow(() -> new BadRequestExceptions(getNotFoundErrorMessage()));
+
+        if (softDeleteEntity(entity)) {
+            Entity savedEntity = repository.save(entity);
+            return toResponse(savedEntity, new HashMap<>());
+        }
+
+        repository.delete(entity);
+        return toResponse(entity, new HashMap<>());
+    }
+
+    protected boolean isVisibleEntity(Entity entity) {
+        Boolean active = readBooleanProperty(entity, "getActive");
+        if (active != null && !active) {
+            return false;
+        }
+
+        Boolean deleted = readBooleanProperty(entity, "getIsDeleted");
+        return deleted == null || !deleted;
+    }
+
+    protected boolean softDeleteEntity(Entity entity) {
+        if (writeBooleanProperty(entity, "setActive", false)) {
+            return true;
+        }
+
+        return writeBooleanProperty(entity, "setIsDeleted", true);
+    }
+
+    private Boolean readBooleanProperty(Entity entity, String methodName) {
+        try {
+            Object value = entity.getClass().getMethod(methodName).invoke(entity);
+            return value instanceof Boolean ? (Boolean) value : null;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private boolean writeBooleanProperty(Entity entity, String methodName, boolean value) {
+        try {
+            entity.getClass().getMethod(methodName, Boolean.class).invoke(entity, value);
+            return true;
+        } catch (NoSuchMethodException ignored) {
+            try {
+                entity.getClass().getMethod(methodName, boolean.class).invoke(entity, value);
+                return true;
+            } catch (Exception ignoredAgain) {
+                return false;
+            }
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     protected abstract void validateBeforeCreate(CreateRequest request);
