@@ -140,6 +140,10 @@ public class UserService implements IUserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
+                if (user.getIsDeleted() == null) {
+                        user.setIsDeleted(false);
+                }
+
         if (Boolean.TRUE.equals(user.getIsDeleted())) {
             throw new ResourceNotFoundException("User not found");
         }
