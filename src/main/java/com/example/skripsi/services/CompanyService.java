@@ -356,7 +356,6 @@ public class CompanyService implements ICompanyService {
     public CompanyOptionsResponse getCompanyBySlug(String slug) {
         log.info("[getCompanyBySlug] slug={}", slug);
         Company company = companyRepository.findByCompanySlug(slug);
-
         if (company == null) {
             log.warn("[getCompanyBySlug] company not found slug={}", slug);
             throw new BadRequestExceptions("Company not found");
@@ -364,9 +363,9 @@ public class CompanyService implements ICompanyService {
 
         CompanyEnrichmentData enrichment = fetchEnrichmentData(Collections.singletonList(company.getCompanyId()));
 
+        // If profile is missing, do not throw. Return company with empty profile fields instead.
         if (enrichment.profileMap.get(company.getCompanyId()) == null) {
-            log.warn("[getCompanyBySlug] profile not found companyId={}", company.getCompanyId());
-            throw new BadRequestExceptions("Company profile not found");
+            log.warn("[getCompanyBySlug] profile not found for companyId={}. Returning company without profile fields.", company.getCompanyId());
         }
 
         return toOptionsResponse(company, enrichment);
@@ -486,7 +485,6 @@ public class CompanyService implements ICompanyService {
         if (subCategory == null || subCategory.getCategory() == null) {
             throw new ResourceNotFoundException("Category not found");
         }
-
         Company company = companyRepository.findByCompanySlug(slug);
 
         if (company == null) {
@@ -681,12 +679,24 @@ public class CompanyService implements ICompanyService {
                 .createdBy(securityUtils.getCurrentUserId())
                 .build());
 
-        return CompanyResponse.builder()
+        // Ensure a CompanyProfile exists for the created company to avoid profile-not-found errors
+        CompanyProfile profile = companyProfileRepository.findByCompanyId(savedCompany.getCompanyId());
+        if (profile == null) {
+            profile = CompanyProfile.builder()
                 .companyId(savedCompany.getCompanyId())
-                .companyName(savedCompany.getCompanyName())
-                .companyAbbreviation(savedCompany.getCompanyAbbreviation())
-                .companySlug(savedCompany.getCompanySlug())
+                .createdAt(OffsetDateTime.now())
+                .createdBy(securityUtils.getCurrentUserId())
+                .isPartner(Boolean.FALSE)
                 .build();
+            companyProfileRepository.save(profile);
+        }
+
+        return CompanyResponse.builder()
+            .companyId(savedCompany.getCompanyId())
+            .companyName(savedCompany.getCompanyName())
+            .companyAbbreviation(savedCompany.getCompanyAbbreviation())
+            .companySlug(savedCompany.getCompanySlug())
+            .build();
     }
 
     public CompanyResponse updateCompanyMasterData(Integer id, UpdateCompanyRequest request) {

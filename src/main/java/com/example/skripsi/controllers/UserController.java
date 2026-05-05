@@ -43,9 +43,9 @@ public class UserController {
 
     @PatchMapping("/{userId}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Map<String, Object>> updateUser(@PathVariable Long userId, @Valid @RequestBody UpdateUserRequest request) {
-        var result = userService.updateUserByAdmin(userId, request);
-        return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", result));
+    public ResponseEntity<Map<String, Object>> updateUser(@PathVariable Long userId, @RequestBody Map<String, Object> request) {
+        var result = userService.updateUser(userId, request);
+        return ResponseEntity.ok(Map.of("success", true, "message", "User updated", "result", result));
     }
 
     @DeleteMapping("/{userId}")

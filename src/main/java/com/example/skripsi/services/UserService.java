@@ -135,41 +135,91 @@ public class UserService implements IUserService {
         return toResponse(userRepository.save(user), null);
     }
 
-    @Override
-    public UserResponse updateUserByAdmin(Long userId, UpdateUserRequest request) {
+    public UserResponse updateUser(Long userId, Map<String, Object> request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-
-                if (user.getIsDeleted() == null) {
-                        user.setIsDeleted(false);
-                }
 
         if (Boolean.TRUE.equals(user.getIsDeleted())) {
             throw new ResourceNotFoundException("User not found");
         }
 
-        String email = request.getEmail().toLowerCase();
-        validateAdminEmail(email);
-        userRepository.findByEmail(email)
-                .ifPresent(existing -> {
-                    if (!existing.getUserId().equals(userId)) {
-                        throw new BadRequestExceptions(MessageConstants.Auth.EMAIL_ALREADY_USED);
-                    }
-                });
-
-        user.setFirstName(request.getFirstName());
-        user.setLastName(request.getLastName());
-        user.setEmail(email);
-        user.setUpdatedAt(OffsetDateTime.now());
-
-        if (request.getPassword() != null && !request.getPassword().isBlank()) {
-            validateAdminPassword(request.getPassword());
-            user.setPassword(BCrypt.hashpw(request.getPassword(), BCrypt.gensalt()));
+        // Update firstName if provided
+        if (request.containsKey("firstName")) {
+            Object fnValue = request.get("firstName");
+            if (fnValue != null) {
+                String fn = fnValue.toString().trim();
+                if (!fn.isBlank()) {
+                    user.setFirstName(fn);
+                }
+            }
         }
 
-        user.setRoles(java.util.Set.of(resolveRole(request.getRole())));
+        // Update lastName if provided
+        if (request.containsKey("lastName")) {
+            Object lnValue = request.get("lastName");
+            if (lnValue != null) {
+                String ln = lnValue.toString().trim();
+                if (!ln.isBlank()) {
+                    user.setLastName(ln);
+                }
+            }
+        }
 
+        // Update email if provided
+        if (request.containsKey("email")) {
+            Object emailValue = request.get("email");
+            if (emailValue != null) {
+                String email = emailValue.toString().trim().toLowerCase();
+                if (!email.isBlank()) {
+                    validateAdminEmail(email);
+                    userRepository.findByEmail(email)
+                            .ifPresent(existing -> {
+                                if (!existing.getUserId().equals(userId)) {
+                                    throw new BadRequestExceptions(MessageConstants.Auth.EMAIL_ALREADY_USED);
+                                }
+                            });
+                    user.setEmail(email);
+                }
+            }
+        }
+
+        // Update role if provided
+        if (request.containsKey("role")) {
+            Object roleValue = request.get("role");
+            if (roleValue != null) {
+                String roleName = roleValue.toString().trim();
+                if (!roleName.isBlank()) {
+                    user.setRoles(java.util.Set.of(resolveRole(roleName)));
+                }
+            }
+        }
+
+        // Update password if provided
+        if (request.containsKey("password")) {
+            Object pwValue = request.get("password");
+            if (pwValue != null) {
+                String password = pwValue.toString().trim();
+                if (!password.isBlank()) {
+                    validateAdminPassword(password);
+                    user.setPassword(BCrypt.hashpw(password, BCrypt.gensalt()));
+                }
+            }
+        }
+
+        user.setUpdatedAt(OffsetDateTime.now());
         return toResponse(userRepository.save(user), null);
+    }
+
+    @Override
+    public UserResponse updateUserByAdmin(Long userId, UpdateUserRequest request) {
+        Map<String, Object> requestMap = Map.of(
+                "firstName", request.getFirstName(),
+                "lastName", request.getLastName(),
+                "email", request.getEmail(),
+                "password", request.getPassword() != null ? request.getPassword() : "",
+                "role", request.getRole()
+        );
+        return updateUser(userId, requestMap);
     }
 
     @Override

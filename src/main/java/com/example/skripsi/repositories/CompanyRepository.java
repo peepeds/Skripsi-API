@@ -161,10 +161,10 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
             c.companyAbbreviation,
             c.companySlug
         )
-        FROM Company c
-        JOIN CompanyProfile cp ON cp.companyId = c.companyId
-        WHERE cp.subcategoryId = :subCategoryId
-          AND (:cursor IS NULL OR c.companyId > :cursor)
+                FROM Company c
+                JOIN CompanyProfile cp ON cp.companyId = c.companyId
+                WHERE cp.subcategoryId = :subCategoryId
+                    AND (:cursor IS NULL OR c.companyId > :cursor)
         ORDER BY c.companyId ASC
     """)
     List<CompanyOptionsResponse> findCompaniesBySubCategoryIdViaProfileFromCursor(
@@ -180,11 +180,11 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
             c.companyAbbreviation,
             c.companySlug
         )
-        FROM Company c
-        JOIN CompanyProfile cp ON cp.companyId = c.companyId
-        JOIN SubCategory sc ON sc.subCategoryId = cp.subcategoryId
-        WHERE LOWER(sc.subCategoryName) = LOWER(:subCategoryName)
-          AND (:cursor IS NULL OR c.companyId > :cursor)
+                FROM Company c
+                JOIN CompanyProfile cp ON cp.companyId = c.companyId
+                JOIN SubCategory sc ON sc.subCategoryId = cp.subcategoryId
+                WHERE LOWER(sc.subCategoryName) = LOWER(:subCategoryName)
+                    AND (:cursor IS NULL OR c.companyId > :cursor)
         ORDER BY c.companyId ASC
     """)
     List<CompanyOptionsResponse> findCompaniesBySubCategoryNameViaProfileFromCursor(

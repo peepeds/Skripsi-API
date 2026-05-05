@@ -39,4 +39,5 @@ public class Company {
     @Column(name = "updated_by")
     private Long updatedBy;
 
+
 }
