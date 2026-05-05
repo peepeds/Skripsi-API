@@ -1,6 +1,6 @@
 package com.example.skripsi.controllers;
 
-import com.example.skripsi.models.*;
+import com.example.skripsi.entities.SubCategory;
 import com.example.skripsi.models.category.*;
 import com.example.skripsi.services.*;
 import jakarta.validation.Valid;
@@ -47,11 +47,11 @@ public class CategoryController {
         return ResponseEntity.ok(java.util.Map.of("success", true, "message", "OK", "result", result));
     }
 
-    @PatchMapping("/subcategory/{id}")
+    @PutMapping("/subcategory/{id}")
     @PreAuthorize("hasAnyRole('ADMIN')")
-    public ResponseEntity<java.util.Map<String, Object>> updateSubCategory(@PathVariable Long id, @RequestBody java.util.Map<String, Object> body) {
-        var result = categoryService.updateSubCategoryMasterData(id, body);
-        return ResponseEntity.ok(java.util.Map.of("success", true, "message", "OK", "result", result));
+    public ResponseEntity<java.util.Map<String, Object>> updateSubCategory(@PathVariable Long id, @RequestBody SubCategory request) {
+        var result = categoryService.updateSubCategory(id, request);
+        return ResponseEntity.ok(java.util.Map.of("success", true, "message", "Updated successfully", "result", result));
     }
 
     @DeleteMapping("/subcategory/{id}")
@@ -77,7 +77,23 @@ public class CategoryController {
             @RequestParam(value = "cursor", required = false) Long cursor,
             @RequestParam(value = "limit", defaultValue = "10") int limit) {
         var result = categoryService.getCompaniesBySubCategoryName(subCategoryName, type, cursor, limit);
-        return ResponseEntity.ok(java.util.Map.of("success", true, "message", "OK", "result", result));
+        // Return a consistent shape. If service returned a CursorPageResponse,
+        // expose both the cursor object and a flat `items` list + `meta` for clients.
+        java.util.Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("success", true);
+        payload.put("message", "OK");
+
+        if (result instanceof com.example.skripsi.models.CursorPageResponse<?> page) {
+            // keep the original cursor object under `result` for clients that expect it
+            payload.put("result", page);
+            // add compatibility shortcuts
+            payload.put("items", page.getResult());
+            payload.put("meta", page.getMeta());
+        } else {
+            payload.put("result", result);
+        }
+
+        return ResponseEntity.ok(payload);
     }
 
     @GetMapping("/top-categories")

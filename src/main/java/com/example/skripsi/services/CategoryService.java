@@ -80,11 +80,15 @@ public class CategoryService implements ICategoryService {
         }
 
         if (TypeConstants.COMPANIES.equals(normalizedType)) {
+            var subCategory = subCategoryRepository.findBySubCategoryNameIgnoreCase(subCategoryName);
+            if (subCategory.isEmpty() || Boolean.TRUE.equals(subCategory.get().getIsDeleted())) {
+                return emptyCursorPageResponse();
+            }
             return companyService.getCompaniesBySubCategoryNameViaProfile(subCategoryName, cursor, limit);
         } else {
             var subCategory = subCategoryRepository.findBySubCategoryNameIgnoreCase(subCategoryName);
 
-            if (subCategory.isEmpty()) {
+            if (subCategory.isEmpty() || Boolean.TRUE.equals(subCategory.get().getIsDeleted())) {
                 return emptyCursorPageResponse();
             }
 
@@ -137,6 +141,7 @@ public class CategoryService implements ICategoryService {
 
         if (includeSubCategories && category.getSubCategories() != null) {
             subCategoryResponses = category.getSubCategories().stream()
+                .filter(sub -> !Boolean.TRUE.equals(sub.getIsDeleted()))
                     .map(sub -> SubCategoryResponse.builder()
                             .subCategoryId(sub.getSubCategoryId())
                             .subCategoryName(sub.getSubCategoryName())
@@ -170,6 +175,10 @@ public class CategoryService implements ICategoryService {
     public SubCategorySummaryResponse getSubCategorySummary(String subCategoryName) {
         SubCategory subCategory = subCategoryRepository.findBySubCategoryNameIgnoreCase(subCategoryName)
                 .orElseThrow(() -> new ResourceNotFoundException("SubCategory not found: " + subCategoryName));
+
+        if (Boolean.TRUE.equals(subCategory.getIsDeleted())) {
+            throw new ResourceNotFoundException("SubCategory not found: " + subCategoryName);
+        }
 
         Long subCategoryId = subCategory.getSubCategoryId();
         String categoryType = subCategory.getCategory().getCategoryType();
@@ -253,6 +262,7 @@ public class CategoryService implements ICategoryService {
     public List<SubCategoryResponse> getAllSubCategories() {
         List<SubCategory> subCategories = subCategoryRepository.findAllWithCategory();
         return subCategories.stream()
+                .filter(sub -> !Boolean.TRUE.equals(sub.getIsDeleted()))
                 .map(this::toSubCategoryResponse)
                 .collect(Collectors.toList());
     }
@@ -270,6 +280,30 @@ public class CategoryService implements ICategoryService {
                 .build());
 
         return toSubCategoryResponse(savedSubCategory);
+    }
+
+    public SubCategory updateSubCategory(Long id, SubCategory request) {
+        SubCategory existing = subCategoryRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Subcategory not found"));
+
+        if (request == null) {
+            throw new RuntimeException("Subcategory request is required");
+        }
+
+        if (request.getSubCategoryName() == null || request.getSubCategoryName().trim().isEmpty()) {
+            throw new RuntimeException("Subcategory name is required");
+        }
+        existing.setSubCategoryName(request.getSubCategoryName().trim());
+
+        if (request.getCategory() == null || request.getCategory().getCategoryId() == null) {
+            throw new RuntimeException("Category is required");
+        }
+
+        Category category = categoryRepository.findById(request.getCategory().getCategoryId())
+                .orElseThrow(() -> new RuntimeException("Category not found"));
+        existing.setCategory(category);
+
+        return subCategoryRepository.save(existing);
     }
 
     public SubCategoryResponse updateSubCategoryMasterData(Long id, Map<String, Object> request) {
@@ -301,8 +335,22 @@ public class CategoryService implements ICategoryService {
         SubCategory subCategory = subCategoryRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("SubCategory not found"));
 
-        subCategoryRepository.delete(subCategory);
-        return toSubCategoryResponse(subCategory);
+        // Soft delete: set isDeleted flag and save. If caller provided { force: true }, perform hard delete.
+        boolean force = false;
+        if (body != null && body.containsKey("force")) {
+            Object v = body.get("force");
+            if (v instanceof Boolean) force = (Boolean) v;
+            else if (v != null) force = "true".equalsIgnoreCase(String.valueOf(v));
+        }
+
+        if (force) {
+            subCategoryRepository.delete(subCategory);
+            return toSubCategoryResponse(subCategory);
+        }
+
+        subCategory.setIsDeleted(true);
+        SubCategory saved = subCategoryRepository.save(subCategory);
+        return toSubCategoryResponse(saved);
     }
 
     private SubCategoryResponse toSubCategoryResponse(SubCategory subCategory) {
