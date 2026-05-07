@@ -6,10 +6,10 @@ public class SecurityConstants {
             "/auth/**",
             "/user/check-email",
             "/region/options",
-            "/department/options",
-            "/major/**",
-            "/company/**",
-            "/category/**",
+            "/major/options",
+            "/company",
+            "/company/{companySlug}",
+            "/category",
             "/subcategory/**",
             "/lookup/{type}"
     };

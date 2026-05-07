@@ -33,14 +33,12 @@ public class CompanyService implements ICompanyService {
     private final CompanyRequestRepository companyRequestRepository;
     private final CompanyProfileRepository companyProfileRepository;
     private final CompanySaveRepository companySaveRepository;
-    private final SubCategoryRepository subCategoryRepository;
     private final AuditService auditService;
     private final SecurityUtils securityUtils;
     private final IUserService userService;
     private final ICategoryService categoryService;
     private final IReviewService reviewService;
     private final NotificationHelper notificationHelper;
-    private final UserProfileRepository userProfileRepository;
 
     public CompanyService(CompanyRepository companyRepository,
                           CompanyRequestRepository companyRequestRepository,
@@ -49,11 +47,9 @@ public class CompanyService implements ICompanyService {
                           IUserService userService,
                           CompanyProfileRepository companyProfileRepository,
                           CompanySaveRepository companySaveRepository,
-                          SubCategoryRepository subCategoryRepository,
                           @Lazy ICategoryService categoryService,
                           @Lazy IReviewService reviewService,
-                          NotificationHelper notificationHelper,
-                          UserProfileRepository userProfileRepository) {
+                          NotificationHelper notificationHelper) {
         this.companyRepository = companyRepository;
         this.companyRequestRepository = companyRequestRepository;
         this.auditService = auditService;
@@ -61,9 +57,7 @@ public class CompanyService implements ICompanyService {
         this.userService = userService;
         this.companyProfileRepository = companyProfileRepository;
         this.companySaveRepository = companySaveRepository;
-        this.subCategoryRepository = subCategoryRepository;
         this.categoryService = categoryService;
-        this.userProfileRepository = userProfileRepository;
         this.reviewService = reviewService;
         this.notificationHelper = notificationHelper;
     }
@@ -73,18 +67,15 @@ public class CompanyService implements ICompanyService {
         final Map<Long, Long> reviewCountMap;
         final Map<Long, CompanyProfile> profileMap;
         final Map<Long, String> subcategoryNameMap;
-        final Map<Long, String> categoryNameMap;
 
         CompanyEnrichmentData(Map<Long, Double> ratingMap,
                               Map<Long, Long> reviewCountMap,
                               Map<Long, CompanyProfile> profileMap,
-                              Map<Long, String> subcategoryNameMap,
-                              Map<Long, String> categoryNameMap) {
+                              Map<Long, String> subcategoryNameMap) {
             this.ratingMap = ratingMap;
             this.reviewCountMap = reviewCountMap;
             this.profileMap = profileMap;
             this.subcategoryNameMap = subcategoryNameMap;
-            this.categoryNameMap = categoryNameMap;
         }
     }
 
@@ -267,8 +258,8 @@ public class CompanyService implements ICompanyService {
     }
 
     @Override
-    public List<CompanyOptionsResponse> getTopCompaniesAvgRating(Long userId) {
-        List<Long> companyIds = resolveTopCompanyIds(userId);
+    public List<CompanyOptionsResponse> getTopCompaniesAvgRating() {
+        List<Long> companyIds = reviewService.getTop10CompanyIdsByRating();
 
         if (companyIds.isEmpty()) {
             return List.of();
@@ -284,32 +275,6 @@ public class CompanyService implements ICompanyService {
                 .filter(Objects::nonNull)
                 .map(company -> toOptionsResponse(company, enrichment))
                 .collect(Collectors.toList());
-    }
-
-    private List<Long> resolveTopCompanyIds(Long userId) {
-        if (userId == null) {
-            return reviewService.getTop10CompanyIdsByRating();
-        }
-
-        Long majorId = userProfileRepository.findByUserUserId(userId)
-                .map(profile -> profile.getMajor().getMajorId().longValue())
-                .orElse(null);
-
-        if (majorId == null) {
-            return reviewService.getTop10CompanyIdsByRating();
-        }
-
-        List<Long> majorFiltered = reviewService.getTop10CompanyIdsByRatingForMajor(majorId);
-        List<Long> global = reviewService.getTop10CompanyIdsByRating();
-
-        List<Long> merged = new java.util.ArrayList<>(majorFiltered);
-        for (Long id : global) {
-            if (!majorFiltered.contains(id)) {
-                merged.add(id);
-                if (merged.size() == 10) break;
-            }
-        }
-        return merged;
     }
 
     @Override
@@ -356,6 +321,7 @@ public class CompanyService implements ICompanyService {
     public CompanyOptionsResponse getCompanyBySlug(String slug) {
         log.info("[getCompanyBySlug] slug={}", slug);
         Company company = companyRepository.findByCompanySlug(slug);
+
         if (company == null) {
             log.warn("[getCompanyBySlug] company not found slug={}", slug);
             throw new BadRequestExceptions("Company not found");
@@ -363,9 +329,9 @@ public class CompanyService implements ICompanyService {
 
         CompanyEnrichmentData enrichment = fetchEnrichmentData(Collections.singletonList(company.getCompanyId()));
 
-        // If profile is missing, do not throw. Return company with empty profile fields instead.
         if (enrichment.profileMap.get(company.getCompanyId()) == null) {
-            log.warn("[getCompanyBySlug] profile not found for companyId={}. Returning company without profile fields.", company.getCompanyId());
+            log.warn("[getCompanyBySlug] profile not found companyId={}", company.getCompanyId());
+            throw new BadRequestExceptions("Company profile not found");
         }
 
         return toOptionsResponse(company, enrichment);
@@ -443,7 +409,7 @@ public class CompanyService implements ICompanyService {
 
     private CompanyEnrichmentData fetchEnrichmentData(List<Long> companyIds) {
         if (companyIds.isEmpty()) {
-            return new CompanyEnrichmentData(new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>());
+            return new CompanyEnrichmentData(new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>());
         }
 
         Map<Long, Double> ratingMap = reviewService.getRatingsByCompanyIds(companyIds);
@@ -462,9 +428,8 @@ public class CompanyService implements ICompanyService {
                 .collect(Collectors.toList());
 
         Map<Long, String> subcategoryNameMap = categoryService.getSubCategoryNameMap(subcategoryIds);
-        Map<Long, String> categoryNameMap = categoryService.getSubCategoryCategoryNameMap(subcategoryIds);
 
-        return new CompanyEnrichmentData(ratingMap, reviewCountMap, profileMap, subcategoryNameMap, categoryNameMap);
+        return new CompanyEnrichmentData(ratingMap, reviewCountMap, profileMap, subcategoryNameMap);
     }
 
     private void validateCompanyRequestNotFinalized(CompanyRequest companyRequest) {
@@ -476,43 +441,20 @@ public class CompanyService implements ICompanyService {
     }
 
     private void createApprovedCompany(CompanyRequest companyRequest, Long reviewerId) {
-        String slug = generateSlug(companyRequest.getCompanyName());
-        SubCategory subCategory = companyRequest.getSubcategoryId() == null
-                ? null
-                : subCategoryRepository.findById(companyRequest.getSubcategoryId())
-                .orElseThrow(() -> new ResourceNotFoundException("SubCategory not found"));
-
-        if (subCategory == null || subCategory.getCategory() == null) {
-            throw new ResourceNotFoundException("Category not found");
-        }
-        Company company = companyRepository.findByCompanySlug(slug);
-
-        if (company == null) {
-            company = createCompany(Company.builder()
+        Company savedCompany = companyRepository.save(Company.builder()
                 .companyName(companyRequest.getCompanyName())
                 .companyAbbreviation(companyRequest.getCompanyAbbreviation())
-                .companySlug(slug)
                 .createdBy(reviewerId)
-                .createdAt(OffsetDateTime.now())
                 .build());
-        }
-
-        CompanyProfile profile = companyProfileRepository.findByCompanyId(company.getCompanyId());
-        if (profile == null) {
-            profile = CompanyProfile.builder()
-                .companyId(company.getCompanyId())
+        companyProfileRepository.save(CompanyProfile.builder()
+                .companyId(savedCompany.getCompanyId())
+                .website(companyRequest.getWebsite())
+                .bio(companyRequest.getBio())
+                .isPartner(false)
+                .subcategoryId(companyRequest.getSubcategoryId())
                 .createdAt(OffsetDateTime.now())
                 .createdBy(reviewerId)
-                .build();
-        }
-
-        profile.setWebsite(companyRequest.getWebsite());
-        profile.setBio(companyRequest.getBio());
-        profile.setIsPartner(Boolean.FALSE);
-        profile.setSubcategoryId(subCategory.getSubCategoryId());
-        profile.setUpdatedAt(OffsetDateTime.now());
-        profile.setUpdatedBy(reviewerId);
-        companyProfileRepository.save(profile);
+                .build());
     }
 
     private void updateCompanyRequestStatus(CompanyRequest companyRequest,
@@ -583,9 +525,6 @@ public class CompanyService implements ICompanyService {
         String subcategoryName = (profile != null && profile.getSubcategoryId() != null)
                 ? enrichment.subcategoryNameMap.get(profile.getSubcategoryId())
                 : null;
-        String categoryName = (profile != null && profile.getSubcategoryId() != null)
-            ? enrichment.categoryNameMap.get(profile.getSubcategoryId())
-            : null;
 
         Long totalReviews = enrichment.reviewCountMap.getOrDefault(company.getCompanyId(), 0L);
 
@@ -593,15 +532,13 @@ public class CompanyService implements ICompanyService {
                 .companyId(company.getCompanyId())
                 .companyName(company.getCompanyName())
                 .companyAbbreviation(company.getCompanyAbbreviation())
-                .website(profile != null && profile.getWebsite() != null ? profile.getWebsite() : "")
+                .website(profile != null ? profile.getWebsite() : null)
                 .bio(profile != null ? profile.getBio() : null)
                 .isPartner(profile != null ? profile.getIsPartner() : null)
-                .categoryName(categoryName != null ? categoryName : "")
                 .subcategoryName(subcategoryName)
                 .companySlug(company.getCompanySlug())
                 .rating(enrichment.ratingMap.get(company.getCompanyId()))
                 .totalReviews(totalReviews)
-                .reviewCount(totalReviews != null ? totalReviews : 0L)
                 .build();
     }
 
@@ -662,99 +599,5 @@ public class CompanyService implements ICompanyService {
                         .reviewedAt(companyRequest.getReviewedAt())
                         .build())
                 .build();
-    }
-
-    // Master Data CRUD methods
-    @Transactional
-    public Company createCompany(Company company) {
-        return companyRepository.save(company);
-    }
-
-    public CompanyResponse createCompanyMasterData(CreateCompanyRequest request) {
-        Company savedCompany = createCompany(Company.builder()
-                .companyName(request.getCompanyName())
-                .companyAbbreviation(request.getCompanyAbbreviation())
-                .companySlug(generateSlug(request.getCompanyName()))
-                .createdAt(OffsetDateTime.now())
-                .createdBy(securityUtils.getCurrentUserId())
-                .build());
-
-        // Ensure a CompanyProfile exists for the created company to avoid profile-not-found errors
-        CompanyProfile profile = companyProfileRepository.findByCompanyId(savedCompany.getCompanyId());
-        if (profile == null) {
-            profile = CompanyProfile.builder()
-                .companyId(savedCompany.getCompanyId())
-                .createdAt(OffsetDateTime.now())
-                .createdBy(securityUtils.getCurrentUserId())
-                .isPartner(Boolean.FALSE)
-                .build();
-            companyProfileRepository.save(profile);
-        }
-
-        return CompanyResponse.builder()
-            .companyId(savedCompany.getCompanyId())
-            .companyName(savedCompany.getCompanyName())
-            .companyAbbreviation(savedCompany.getCompanyAbbreviation())
-            .companySlug(savedCompany.getCompanySlug())
-            .build();
-    }
-
-    public CompanyResponse updateCompanyMasterData(Integer id, UpdateCompanyRequest request) {
-        Company company = companyRepository.findById((long) id)
-                .orElseThrow(() -> new ResourceNotFoundException("Company not found"));
-
-        if (request.getCompanyName() != null) {
-            company.setCompanyName(request.getCompanyName());
-        }
-        if (request.getCompanyAbbreviation() != null) {
-            company.setCompanyAbbreviation(request.getCompanyAbbreviation());
-        }
-
-        Company savedCompany = companyRepository.save(company);
-
-        return CompanyResponse.builder()
-                .companyId(savedCompany.getCompanyId())
-                .companyName(savedCompany.getCompanyName())
-                .companyAbbreviation(savedCompany.getCompanyAbbreviation())
-                .companySlug(savedCompany.getCompanySlug())
-                .build();
-    }
-
-    public CompanyResponse deleteCompanyMasterData(Integer id, java.util.Map<String, Object> body) {
-        Company company = companyRepository.findById((long) id)
-                .orElseThrow(() -> new ResourceNotFoundException("Company not found"));
-
-        if (!softDeleteEntity(company)) {
-            companyRepository.delete(company);
-        } else {
-            companyRepository.save(company);
-        }
-
-        return CompanyResponse.builder()
-                .companyId(company.getCompanyId())
-                .companyName(company.getCompanyName())
-                .companyAbbreviation(company.getCompanyAbbreviation())
-                .companySlug(company.getCompanySlug())
-                .build();
-    }
-
-    private String generateSlug(String name) {
-        return name.toLowerCase().replaceAll("\\s+", "-").replaceAll("[^a-z0-9-]", "");
-    }
-
-    private boolean softDeleteEntity(Company company) {
-        try {
-            company.getClass().getMethod("setIsDeleted", Boolean.class).invoke(company, true);
-            return true;
-        } catch (NoSuchMethodException ignored) {
-            try {
-                company.getClass().getMethod("setIsDeleted", boolean.class).invoke(company, true);
-                return true;
-            } catch (Exception ignoredAgain) {
-                return false;
-            }
-        } catch (Exception ignored) {
-            return false;
-        }
     }
 }

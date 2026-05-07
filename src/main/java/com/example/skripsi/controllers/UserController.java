@@ -2,9 +2,10 @@ package com.example.skripsi.controllers;
 
 import com.example.skripsi.interfaces.ICompanyService;
 import com.example.skripsi.interfaces.IReviewService;
+import com.example.skripsi.models.*;
 import com.example.skripsi.models.user.*;
+import com.example.skripsi.models.constant.*;
 import com.example.skripsi.services.*;
-import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -28,107 +29,140 @@ public class UserController {
 
     @GetMapping("")
     @PreAuthorize("hasRole('ADMIN')")
-        public ResponseEntity<Map<String, Object>> getAllUserByUserPrivilege(){
+    public WebResponse<?> getAllUserByUserPrivilege(){
         var userResponses = userService.getAllUserByUserPrivilege();
 
-                return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", userResponses));
-    }
-
-    @DeleteMapping("/{userId}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Map<String, Object>> deleteUser(@PathVariable Long userId) {
-        var result = userService.deleteUserByAdmin(userId);
-        return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", result));
+        return WebResponse.builder()
+                .success(true)
+                .message(MessageConstants.Success.SUCCESSFULLY_GET_ALL_USER)
+                .result(userResponses)
+                .build();
     }
 
     @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
-        public ResponseEntity<Map<String, Object>> checkIdentity() {
+    public WebResponse<?> checkIdentity() {
 
         var userProfile = userService.getUserProfile();
 
-                return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", userProfile));
+        return WebResponse.builder()
+                .success(true)
+                .message(MessageConstants.Success.SUCCESSFULLY_GET_PROFILE)
+                .result(userProfile)
+                .build();
     }
 
 
     @PostMapping("/check-email")
-    public ResponseEntity<Map<String, Object>> checkEmail(
+    public ResponseEntity<WebResponse<Object>> checkEmail(
             @RequestBody Map<String, String> body
     ) {
         String email = body.get("email");
 
         if (email == null || email.isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Email is required", "result", Map.of()));
+            return ResponseEntity.badRequest().body(
+                    WebResponse.builder()
+                            .success(false)
+                            .message(MessageConstants.Success.EMAIL_IS_REQUIRED)
+                            .build()
+            );
         }
 
         boolean exists = userService.emailExists(email.toLowerCase());
 
         if (exists) {
-                        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("success", false, "message", "Email already used!", "result", Map.of()));
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(
+                    WebResponse.builder()
+                            .success(false)
+                            .message(MessageConstants.Success.EMAIL_ALREADY_USED_CONFLICT)
+                            .build()
+            );
         }
 
-                return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", Map.of("email", email)));
+        return ResponseEntity.ok(
+                WebResponse.builder()
+                        .success(true)
+                        .message(MessageConstants.Success.EMAIL_IS_AVAILABLE)
+                        .build()
+        );
     }
 
     @PostMapping("/certificate")
     @PreAuthorize("isAuthenticated()")
-        public ResponseEntity<Map<String, Object>> uploadCertificate(@RequestBody CreateCertificateRequest request) {
+    public WebResponse<?> uploadCertificate(@RequestBody CreateCertificateRequest request) {
         CertificateResponse response = userService.submitCertificateRequest(request);
 
-                return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", response));
+        return WebResponse.builder()
+                .success(true)
+                .message(MessageConstants.Success.CERTIFICATE_REQUEST_SUBMITTED)
+                .result(response)
+                .build();
     }
 
     @PatchMapping("/certificate/requests/{requestId}/review")
     @PreAuthorize("hasRole('ADMIN')")
-        public ResponseEntity<Map<String, Object>> reviewCertificate(@PathVariable Long requestId, @RequestBody ReviewCertificateRequest request) {
+    public WebResponse<?> reviewCertificate(@PathVariable Long requestId, @RequestBody ReviewCertificateRequest request) {
         CertificateResponse response = userService.reviewCertificateRequest(requestId, request);
 
-                return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", response));
+        return WebResponse.builder()
+                .success(true)
+                .message(MessageConstants.Success.CERTIFICATE_REQUEST_REVIEWED)
+                .result(response)
+                .build();
     }
 
     @GetMapping("/certificate/request/{requestId}")
     @PreAuthorize("isAuthenticated()")
-        public ResponseEntity<Map<String, Object>> getCertificateRequestDetail(@PathVariable Long requestId) {
+    public WebResponse<?> getCertificateRequestDetail(@PathVariable Long requestId) {
         CertificateRequestDetailResponse result = userService.getCertificateRequestDetail(requestId);
 
-                return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", result));
-    }
-
-    @GetMapping("/certificate/requests")
-    @PreAuthorize("hasRole('ADMIN')")
-        public ResponseEntity<Map<String, Object>> getCertificateRequests(@RequestParam(value = "status", required = false) String status,
-                                                 @RequestParam(value = "cursor", required = false) Long cursor,
-                                                 @RequestParam(value = "limit", defaultValue = "15") int limit) {
-        var results = userService.getCertificateRequests(status, cursor, limit);
-                return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", results));
+        return WebResponse.builder()
+                .success(true)
+                .message(MessageConstants.Success.CERTIFICATE_REQUEST_DETAIL)
+                .result(result)
+                .build();
     }
 
     @GetMapping("/my-bookmarks")
     @PreAuthorize("isAuthenticated()")
-        public ResponseEntity<Map<String, Object>> getMyBookmarks(
+    public WebResponse<?> getMyBookmarks(
             @RequestParam(value = "cursor", required = false) Long cursor,
             @RequestParam(value = "limit", defaultValue = "10") int limit) {
         var results = companyService.getMyBookmarks(cursor, limit);
 
-                return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", results));
+        return WebResponse.builder()
+                .success(true)
+                .message(MessageConstants.Success.SUCCESSFULLY_GET_BOOKMARKS)
+                .meta(results.getMeta())
+                .result(results.getResult())
+                .build();
     }
 
     @GetMapping("/my-reviews")
     @PreAuthorize("isAuthenticated()")
-        public ResponseEntity<Map<String, Object>> getMyReviews(
+    public WebResponse<?> getMyReviews(
             @RequestParam(value = "cursor", required = false) Long cursor,
             @RequestParam(value = "limit", defaultValue = "10") int limit) {
         var results = reviewService.getMyReviews(cursor, limit);
 
-                return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", results));
+        return WebResponse.builder()
+                .success(true)
+                .message(MessageConstants.Success.SUCCESSFULLY_GET_MY_REVIEWS)
+                .meta(results.getMeta())
+                .result(results.getResult())
+                .build();
     }
 
     @GetMapping("/my-certificates")
     @PreAuthorize("isAuthenticated()")
-        public ResponseEntity<Map<String, Object>> getMyCertificates() {
+    public WebResponse<?> getMyCertificates() {
         var certificates = userService.getMyCertificates();
 
-                return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", certificates));
+        return WebResponse.builder()
+                .success(true)
+                .message(MessageConstants.Success.SUCCESSFULLY_GET_MY_CERTIFICATES)
+                .result(certificates)
+                .build();
     }
 
 }

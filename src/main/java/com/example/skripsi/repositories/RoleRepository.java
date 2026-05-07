@@ -3,8 +3,5 @@ package com.example.skripsi.repositories;
 import com.example.skripsi.entities.*;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import java.util.Optional;
-
 public interface RoleRepository extends JpaRepository<Role,Integer> {
-	Optional<Role> findByRoleNameIgnoreCase(String roleName);
 }

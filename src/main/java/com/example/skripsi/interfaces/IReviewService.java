@@ -32,7 +32,5 @@ public interface IReviewService {
 
     List<Long> getTop10CompanyIdsByRating();
 
-    List<Long> getTop10CompanyIdsByRatingForMajor(Long majorId);
-
     void toggleLike(LikeRequest request);
 }

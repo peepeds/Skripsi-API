@@ -4,113 +4,122 @@ import com.example.skripsi.entities.*;
 import com.example.skripsi.interfaces.*;
 import com.example.skripsi.models.*;
 import com.example.skripsi.models.company.*;
-import com.example.skripsi.securities.SecurityUtils;
-import com.example.skripsi.services.CompanyService;
+import com.example.skripsi.models.constant.*;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.http.ResponseEntity;
-import java.util.Map;
 
 @RestController
 @RequestMapping("company")
 public class CompanyController {
 
     private final ICompanyService companyService;
-    private final CompanyService companyServiceImpl;
-    private final SecurityUtils securityUtils;
 
-    public CompanyController(ICompanyService companyService, CompanyService companyServiceImpl, SecurityUtils securityUtils) {
+    public CompanyController(ICompanyService companyService) {
         this.companyService = companyService;
-        this.companyServiceImpl = companyServiceImpl;
-        this.securityUtils = securityUtils;
     }
 
     @GetMapping("")
-    public ResponseEntity<Map<String, Object>> xgetCompanies(@RequestParam(value = "cursor", required = false) Long cursor,
+    public WebResponse<?> getCompanies(@RequestParam(value = "cursor", required = false) Long cursor,
                                        @RequestParam(value = "limit", required = false) Integer limit,
                                        @RequestParam(value = "search", required = false) String search,
                                        @RequestParam(value = "sort", required = false) String sort) {
         if (search != null && !search.isEmpty()) {
             var results = companyService.searchCompanies(search);
-            return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", results));
+            return WebResponse.builder()
+                    .success(true)
+                    .message(MessageConstants.Success.SUCCESSFULLY_SEARCH_COMPANIES)
+                    .result(results)
+                    .build();
         } else {
             int limitVal = limit != null ? limit : 15;
             var results = companyService.getCompany(cursor, limitVal, sort);
-            return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", results));
+            return WebResponse.builder()
+                    .success(true)
+                    .message(MessageConstants.Success.SUCCESSFULLY_GET_COMPANIES)
+                    .meta(results.getMeta())
+                    .result(results.getResult())
+                    .build();
         }
-    }
-
-    @PostMapping("")
-    @PreAuthorize("hasAnyRole('ADMIN')")
-    public ResponseEntity<Map<String, Object>> createCompany(@Valid @RequestBody CreateCompanyRequest request) {
-        var result = companyServiceImpl.createCompanyMasterData(request);
-        return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", result));
-    }
-
-    @PatchMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN')")
-    public ResponseEntity<Map<String, Object>> updateCompany(@PathVariable Integer id, @Valid @RequestBody UpdateCompanyRequest request) {
-        var result = companyServiceImpl.updateCompanyMasterData(id, request);
-        return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", result));
-    }
-
-    @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN')")
-    public ResponseEntity<Map<String, Object>> deleteCompany(@PathVariable Integer id, @RequestBody(required = false) java.util.Map<String, Object> body) {
-        var result = companyServiceImpl.deleteCompanyMasterData(id, body);
-        return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", result));
     }
 
     @PostMapping("/requests")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<Map<String, Object>> submitCompanyRequest(@Valid @RequestBody CreateCompanyRequestRequest request) {
+    public WebResponse<?> submitCompanyRequest(@Valid @RequestBody CreateCompanyRequestRequest request) {
         var result = companyService.submitCompanyRequest(request);
-        return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", result));
+        return WebResponse.builder()
+                .success(true)
+                .message(MessageConstants.Success.SUCCESSFULLY_SUBMIT_COMPANY_REQUEST)
+                .result(result)
+                .build();
     }
 
     @GetMapping("/requests")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Map<String, Object>> getCompanyRequests(@RequestParam(value = "status", required = false) CompanyRequestStatus status,
+    public WebResponse<?> getCompanyRequests(@RequestParam(value = "status", required = false) CompanyRequestStatus status,
                                              @RequestParam(value = "cursor", required = false) Long cursor,
                                              @RequestParam(value = "limit", defaultValue = "15") int limit) {
         var results = companyService.getCompanyRequests(status, cursor, limit);
-        return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", results));
+        return WebResponse.builder()
+                .success(true)
+                .message(MessageConstants.Success.SUCCESSFULLY_GET_COMPANY_REQUESTS)
+                .meta(results.getMeta())
+                .result(results.getResult())
+                .build();
     }
 
     @PatchMapping("/requests/{requestId}/review")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Map<String, Object>> reviewCompanyRequest(@PathVariable Long requestId,
+    public WebResponse<?> reviewCompanyRequest(@PathVariable Long requestId,
                                                @Valid @RequestBody ReviewCompanyRequestRequest request) {
         var result = companyService.reviewCompanyRequest(requestId, request);
-        return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", result));
+        return WebResponse.builder()
+                .success(true)
+                .message(MessageConstants.Success.SUCCESSFULLY_REVIEW_COMPANY_REQUEST)
+                .result(result)
+                .build();
     }
 
     @GetMapping("/request/{requestId}")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<Map<String, Object>> getCompanyRequestDetail(@PathVariable Long requestId) {
+    public WebResponse<?> getCompanyRequestDetail(@PathVariable Long requestId) {
         var result = companyService.getCompanyRequestDetail(requestId);
-        return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", result));
+        return WebResponse.builder()
+                .success(true)
+                .message(MessageConstants.Success.COMPANY_REQUEST_DETAIL)
+                .result(result)
+                .build();
     }
 
     @GetMapping("/top-ratings")
-    public ResponseEntity<Map<String, Object>> getTopCompaniesByAverage() {
-        Long userId = securityUtils.getOptionalCurrentUserId().orElse(null);
-        var result = companyService.getTopCompaniesAvgRating(userId);
-        return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", result));
+    public WebResponse<?> getTopCompaniesByAverage() {
+        var result = companyService.getTopCompaniesAvgRating();
+        return WebResponse.builder()
+                .success(true)
+                .message(MessageConstants.Success.SUCCESSFULLY_GET_TOP_10_COMPANIES)
+                .result(result)
+                .build();
     }
 
     @GetMapping("/{slug}")
-    public ResponseEntity<Map<String, Object>> getCompanyBySlug(@PathVariable String slug) {
+    public WebResponse<?> getCompanyBySlug(@PathVariable String slug) {
         var result = companyService.getCompanyBySlug(slug);
-        return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", result));
+        return WebResponse.builder()
+                .success(true)
+                .message(MessageConstants.Success.SUCCESSFULLY_GET_COMPANY_PROFILE)
+                .result(result)
+                .build();
     }
 
     @PostMapping("/{slug}/save")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<Map<String, Object>> saveCompany(@PathVariable String slug,
+    public WebResponse<?> saveCompany(@PathVariable String slug,
                                       @Valid @RequestBody SaveCompanyRequest request) {
         var result = companyService.saveCompany(slug, request);
-        return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", result));
+        return WebResponse.builder()
+                .success(true)
+                .message(MessageConstants.Success.SUCCESSFULLY_SAVE_COMPANY)
+                .result(result)
+                .build();
     }
 }
