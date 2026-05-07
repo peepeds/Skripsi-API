@@ -3,8 +3,10 @@ package com.example.skripsi.repositories;
 import com.example.skripsi.entities.*;
 import com.example.skripsi.repositories.projections.CompanyRatingProjection;
 import com.example.skripsi.repositories.projections.CompanyReviewCountProjection;
+import com.example.skripsi.repositories.projections.MonthlyCountProjection;
 import com.example.skripsi.repositories.projections.RecentReviewProjection;
 import com.example.skripsi.repositories.projections.SubCategorySummaryProjection;
+import com.example.skripsi.repositories.projections.TopReviewCompanyProjection;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -53,6 +55,29 @@ public interface InternshipDetailRepository extends JpaRepository<InternshipDeta
             "LIMIT 10", nativeQuery = true)
     List<CompanyRatingProjection> findTop10CompaniesByAverageRating();
 
+    @Query(value = "SELECT ih.company_id as companyId, " +
+            "ROUND(AVG((id.work_culture_rating + id.learning_opportunity_rating + id.mentorship_rating + id.benefits_rating + id.work_life_balance_rating) / 5.0), 1) as avgRating " +
+            "FROM internship_details id " +
+            "INNER JOIN internship_headers ih ON id.internship_header_id = ih.internship_header_id " +
+            "INNER JOIN user_profiles up ON ih.user_id = up.user_id " +
+            "WHERE up.major_id = :majorId " +
+            "GROUP BY ih.company_id " +
+            "ORDER BY avgRating DESC " +
+            "LIMIT 10", nativeQuery = true)
+    List<CompanyRatingProjection> findTop10CompaniesByAverageRatingForMajor(@Param("majorId") Long majorId);
+
+    @Query(value = "SELECT ih.company_id as companyId, " +
+            "c.company_name as companyName, " +
+            "ROUND(AVG((id.work_culture_rating + id.learning_opportunity_rating + id.mentorship_rating + id.benefits_rating + id.work_life_balance_rating) / 5.0), 1) as avgRating, " +
+            "COUNT(DISTINCT ih.internship_header_id) as totalReviews " +
+            "FROM internship_details id " +
+            "INNER JOIN internship_headers ih ON id.internship_header_id = ih.internship_header_id " +
+            "INNER JOIN companies c ON ih.company_id = c.company_id " +
+            "GROUP BY ih.company_id, c.company_name " +
+            "ORDER BY avgRating DESC " +
+            "LIMIT 10", nativeQuery = true)
+    List<TopReviewCompanyProjection> findTop10CompaniesWithReviewStats();
+
     @Query(value = "SELECT id.testimony, " +
             "CONCAT(u.first_name, ' ', u.last_name) as createdByName, " +
             "ROUND(((COALESCE(id.work_culture_rating, 0) + COALESCE(id.learning_opportunity_rating, 0) + COALESCE(id.mentorship_rating, 0) + COALESCE(id.benefits_rating, 0) + COALESCE(id.work_life_balance_rating, 0)) / 5.0), 1) as averageRating, " +
@@ -96,4 +121,14 @@ public interface InternshipDetailRepository extends JpaRepository<InternshipDeta
               AND id.work_culture_rating IS NOT NULL
             """, nativeQuery = true)
     SubCategorySummaryProjection findSummaryByJobSubCategoryId(@Param("subCategoryId") Long subCategoryId);
+
+    @Query(value = """
+            SELECT TO_CHAR(DATE_TRUNC('month', id.created_at), 'YYYY-MM') AS month,
+                   COUNT(*) AS count
+            FROM internship_details id
+            WHERE id.created_at >= DATE_TRUNC('month', NOW()) - INTERVAL '5 months'
+            GROUP BY DATE_TRUNC('month', id.created_at)
+            ORDER BY DATE_TRUNC('month', id.created_at) ASC
+            """, nativeQuery = true)
+    List<MonthlyCountProjection> countReviewsPerMonthLast6Months();
 }

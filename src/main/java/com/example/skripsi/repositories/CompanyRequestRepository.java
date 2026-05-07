@@ -12,6 +12,8 @@ import java.util.List;
 public interface CompanyRequestRepository extends JpaRepository<CompanyRequest, Long> {
     boolean existsByCompanyNameIgnoreCaseAndStatus(String companyName, CompanyRequestStatus status);
 
+    long countByStatus(CompanyRequestStatus status);
+
     Page<CompanyRequest> findByStatus(CompanyRequestStatus status, Pageable pageable);
 
     Page<CompanyRequest> findByCreatedBy(Long createdBy, Pageable pageable);

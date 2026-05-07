@@ -2,6 +2,7 @@ package com.example.skripsi.repositories;
 
 import com.example.skripsi.entities.*;
 import com.example.skripsi.models.company.*;
+import com.example.skripsi.repositories.projections.MonthlyCountProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -160,10 +161,10 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
             c.companyAbbreviation,
             c.companySlug
         )
-        FROM Company c
-        JOIN CompanyProfile cp ON cp.companyId = c.companyId
-        WHERE cp.subcategoryId = :subCategoryId
-          AND (:cursor IS NULL OR c.companyId > :cursor)
+                FROM Company c
+                JOIN CompanyProfile cp ON cp.companyId = c.companyId
+                WHERE cp.subcategoryId = :subCategoryId
+                    AND (:cursor IS NULL OR c.companyId > :cursor)
         ORDER BY c.companyId ASC
     """)
     List<CompanyOptionsResponse> findCompaniesBySubCategoryIdViaProfileFromCursor(
@@ -179,11 +180,11 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
             c.companyAbbreviation,
             c.companySlug
         )
-        FROM Company c
-        JOIN CompanyProfile cp ON cp.companyId = c.companyId
-        JOIN SubCategory sc ON sc.subCategoryId = cp.subcategoryId
-        WHERE LOWER(sc.subCategoryName) = LOWER(:subCategoryName)
-          AND (:cursor IS NULL OR c.companyId > :cursor)
+                FROM Company c
+                JOIN CompanyProfile cp ON cp.companyId = c.companyId
+                JOIN SubCategory sc ON sc.subCategoryId = cp.subcategoryId
+                WHERE LOWER(sc.subCategoryName) = LOWER(:subCategoryName)
+                    AND (:cursor IS NULL OR c.companyId > :cursor)
         ORDER BY c.companyId ASC
     """)
     List<CompanyOptionsResponse> findCompaniesBySubCategoryNameViaProfileFromCursor(
@@ -191,4 +192,14 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
             @Param("cursor") Long cursor,
             Pageable pageable
     );
+
+    @Query(value = """
+            SELECT TO_CHAR(DATE_TRUNC('month', c.created_at), 'YYYY-MM') AS month,
+                   COUNT(*) AS count
+            FROM companies c
+            WHERE c.created_at >= DATE_TRUNC('month', NOW()) - INTERVAL '5 months'
+            GROUP BY DATE_TRUNC('month', c.created_at)
+            ORDER BY DATE_TRUNC('month', c.created_at) ASC
+            """, nativeQuery = true)
+    List<MonthlyCountProjection> countNewCompaniesPerMonthLast6Months();
 }

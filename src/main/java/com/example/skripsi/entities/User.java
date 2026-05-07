@@ -40,6 +40,17 @@ public class User {
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
 
+    @Builder.Default
+    @Column(name = "is_deleted")
+    private Boolean isDeleted = false;
+
+    @PrePersist
+    void applyDefaults() {
+        if (isDeleted == null) {
+            isDeleted = false;
+        }
+    }
+
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
             name = "user_roles", // nama tabel penghubung

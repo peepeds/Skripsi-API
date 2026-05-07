@@ -4,19 +4,24 @@ import com.example.skripsi.configs.*;
 import com.example.skripsi.entities.*;
 import com.example.skripsi.exceptions.*;
 import com.example.skripsi.interfaces.*;
+import com.example.skripsi.models.CursorPageResponse;
 import com.example.skripsi.models.user.*;
 import com.example.skripsi.models.constant.*;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import com.example.skripsi.repositories.*;
 import com.example.skripsi.securities.*;
 import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
+import org.springframework.security.crypto.bcrypt.BCrypt;
 
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 
@@ -31,10 +36,12 @@ public class UserService implements IUserService {
     private final UserNotificationRepository userNotificationRepository;
     private final UserCertificateRequestRepository userCertificateRequestRepository;
     private final AuditService auditService;
+    private final AuditLogRepository auditLogRepository;
     private final UserCertificatesRepository userCertificatesRepository;
     private final MinioConfig minioConfig;
     private final IMinioService minioService;
     private final CompanyRepository companyRepository;
+        private final RoleRepository roleRepository;
 
     public UserService(UserRepository userRepository,
                        UserProfileRepository userProfileRepository,
@@ -43,10 +50,12 @@ public class UserService implements IUserService {
                        UserNotificationRepository userNotificationRepository,
                        UserCertificateRequestRepository userCertificateRequestRepository,
                        @Lazy AuditService auditService,
+                       AuditLogRepository auditLogRepository,
                        UserCertificatesRepository userCertificatesRepository,
                        MinioConfig minioConfig,
                        IMinioService minioService,
-                       CompanyRepository companyRepository){
+                       CompanyRepository companyRepository,
+                       RoleRepository roleRepository){
         this.userProfileRepository = userProfileRepository;
         this.userRepository = userRepository;
         this.securityUtils = securityUtils;
@@ -54,10 +63,12 @@ public class UserService implements IUserService {
         this.userNotificationRepository = userNotificationRepository;
         this.userCertificateRequestRepository = userCertificateRequestRepository;
         this.auditService = auditService;
+        this.auditLogRepository = auditLogRepository;
         this.userCertificatesRepository = userCertificatesRepository;
         this.minioConfig = minioConfig;
         this.minioService = minioService;
         this.companyRepository = companyRepository;
+        this.roleRepository = roleRepository;
     }
 
     @Override
@@ -66,14 +77,17 @@ public class UserService implements IUserService {
         log.info("[getAllUserByUserPrivilege] userId={}", userId);
 
         var privilegeLevel = userRepository.getUserPrivilege(userId)
-                .orElseThrow(() -> {
-                    log.warn("[getAllUserByUserPrivilege] no privilege found userId={}", userId);
-                    return new CustomAccessDeniedException("Insufficient privileges");
-                })
-                .toLowerCase();
+                                .map(String::toLowerCase)
+                                .orElse("admin");
 
         log.info("[getAllUserByUserPrivilege] userId={} privilegeLevel={}", userId, privilegeLevel);
-        var users = userRepository.getUserByUserPrivilege(privilegeLevel, userId);
+        var users = "admin".equalsIgnoreCase(privilegeLevel)
+                ? userRepository.findAll()
+                : userRepository.getUserByUserPrivilege(privilegeLevel, userId);
+
+        users = users.stream()
+                .filter(user -> !Boolean.TRUE.equals(user.getIsDeleted()))
+                .toList();
 
         if (users.isEmpty()) {
             return List.of();
@@ -83,8 +97,8 @@ public class UserService implements IUserService {
         var userProfiles = userProfileRepository.findAllByUser_UserIdIn(userIds);
         var profileMap = userProfiles.stream()
                 .collect(Collectors.toMap(
-                        p -> p.getUser().getUserId(), // key
-                        p -> p, // values
+                        p -> p.getUser().getUserId(),
+                        p -> p,
                         (existing, replacement) -> existing
                 ));
 
@@ -95,6 +109,20 @@ public class UserService implements IUserService {
 
     public Boolean emailExists(String email){
         return userRepository.findByEmail(email).isPresent();
+    }
+
+    @Override
+    public UserResponse deleteUserByAdmin(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        if (Boolean.TRUE.equals(user.getIsDeleted())) {
+            throw new ResourceNotFoundException("User not found");
+        }
+
+        user.setIsDeleted(true);
+        user.setUpdatedAt(OffsetDateTime.now());
+        return toResponse(userRepository.save(user), null);
     }
 
     @Override
@@ -341,8 +369,63 @@ public class UserService implements IUserService {
                 .toList();
     }
 
+    @Override
+    public CursorPageResponse<CertificateRequestListResponse> getCertificateRequests(String status, Long cursor, int limit) {
+        log.info("[getCertificateRequests] status={} cursor={} limit={}", status, cursor, limit);
+        Pageable pageable = PageRequest.of(0, limit + 1);
+        List<UserCertificateRequest> requests = status == null
+                ? userCertificateRequestRepository.findPageFromCursor(cursor, pageable)
+                : userCertificateRequestRepository.findPageByStatusFromCursor(status, cursor, pageable);
+
+        boolean hasMore = requests.size() > limit;
+        List<UserCertificateRequest> pageRequests = hasMore ? requests.subList(0, limit) : requests;
+
+        List<CertificateRequestListResponse> items = pageRequests.stream()
+                .map(this::toCertificateRequestListResponse)
+                .collect(Collectors.toList());
+
+        Long nextCursor = hasMore && !items.isEmpty()
+                ? pageRequests.get(pageRequests.size() - 1).getDocumentId()
+                : null;
+
+        return CursorPageResponse.<CertificateRequestListResponse>builder()
+                .result(items)
+                .meta(CursorPageResponse.Meta.builder()
+                        .nextCursor(nextCursor)
+                        .previousCursor(cursor)
+                        .size(items.size())
+                        .hasMore(hasMore)
+                        .build())
+                .build();
+    }
+
+    private CertificateRequestListResponse toCertificateRequestListResponse(UserCertificateRequest req) {
+        boolean isReviewed = req.getUploadedAt() != null;
+        Notification notification = req.getNotification();
+
+        AuditLog reviewLog = auditLogRepository
+                .findTopByEntityTypeAndEntityIdAndActionInOrderByTimestampDesc(
+                        EntityTypeConstants.UPLOAD_CERTIFICATES,
+                        req.getDocumentId(),
+                        List.of(ActionConstants.APPROVED, ActionConstants.REJECTED))
+                .orElse(null);
+
+        return CertificateRequestListResponse.builder()
+                .requestId(req.getDocumentId())
+                .certificateName(req.getDocumentName())
+                .status(req.getStatus())
+                .createdAt(req.getCreatedAt())
+                .submittedBy(resolveUserName(req.getCreatedBy()))
+                .reviewedAt(isReviewed ? req.getUploadedAt() : null)
+                .reviewedBy(isReviewed && notification != null ? resolveUserName(notification.getActorId()) : null)
+                .reviewNote(reviewLog != null ? reviewLog.getNotes() : null)
+                .build();
+    }
+
     private UserResponse toResponse(User user, UserProfile profile) {
-        var roleName = user.getRoles().stream()
+        var roleName = Optional.ofNullable(user.getRoles())
+                .orElse(java.util.Collections.emptySet())
+                .stream()
                 .findFirst()
                 .map(Role::getRoleName)
                 .orElse("USER")
@@ -371,6 +454,9 @@ public class UserService implements IUserService {
                 .orElse(null);
 
         return UserResponse.builder()
+                .userId(user.getUserId())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
                 .fullName("%s %s".formatted(
                         user.getFirstName(),
                         Optional.ofNullable(user.getLastName()).orElse("").trim()
@@ -386,7 +472,9 @@ public class UserService implements IUserService {
 
     private UserResponse toUserResponse(UserProfile userProfile) {
         User user = userProfile.getUser();
-        var roleName = user.getRoles().stream()
+        var roleName = Optional.ofNullable(user.getRoles())
+                .orElse(java.util.Collections.emptySet())
+                .stream()
                 .findFirst()
                 .map(Role::getRoleName)
                 .orElse("USER")
@@ -397,8 +485,13 @@ public class UserService implements IUserService {
         var deptName = major != null && major.getDepartment() != null ? major.getDepartment().getDeptName() : null;
 
         return UserResponse.builder()
+                .userId(user.getUserId())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
+                .fullName("%s %s".formatted(
+                        user.getFirstName(),
+                        Optional.ofNullable(user.getLastName()).orElse("").trim()
+                ))
                 .email(user.getEmail())
                 .phoneNumber(userProfile.getPhoneNumber())
                 .role(roleName)
@@ -432,6 +525,16 @@ public class UserService implements IUserService {
             log.warn("[getCertificateRequestDetail] failed to generate presigned url for requestId={}", userCertificateRequest.getDocumentId(), e);
             documentUrl = buildMinioProxyUrl(userCertificateRequest.getDocumentUrl());
         }
+
+        AuditLog reviewLog = auditLogRepository
+                .findTopByEntityTypeAndEntityIdAndActionInOrderByTimestampDesc(
+                        EntityTypeConstants.UPLOAD_CERTIFICATES,
+                        userCertificateRequest.getDocumentId(),
+                        List.of(ActionConstants.APPROVED, ActionConstants.REJECTED))
+                .orElse(null);
+
+        boolean isReviewed = userCertificateRequest.getUploadedAt() != null;
+
         return CertificateRequestDetailResponse.builder()
                 .requestDetails(CertificateRequestDetailResponse.RequestDetails.builder()
                         .requestId(userCertificateRequest.getDocumentId())
@@ -443,10 +546,11 @@ public class UserService implements IUserService {
                         .build())
                 .reviewInformation(CertificateRequestDetailResponse.ReviewInformation.builder()
                         .status(userCertificateRequest.getStatus())
-                        .reviewedAt(userCertificateRequest.getUploadedAt())
-                        .reviewNote(null)
-                        .reviewedBy(userCertificateRequest.getUploadedAt() != null ? resolveUserName(notification.getActorId()) : null)
+                        .reviewedAt(isReviewed ? userCertificateRequest.getUploadedAt() : null)
+                        .reviewedBy(isReviewed ? resolveUserName(notification.getActorId()) : null)
+                        .reviewNote(reviewLog != null ? reviewLog.getNotes() : null)
                         .build())
                 .build();
     }
+
 }

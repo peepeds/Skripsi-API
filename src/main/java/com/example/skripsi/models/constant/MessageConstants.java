@@ -56,6 +56,9 @@ public class MessageConstants {
         public static final String CERTIFICATE_REQUEST_REVIEWED = "Certificate request reviewed successfully";
         public static final String CERTIFICATE_REQUEST_DETAIL = "Certificate request detail";
         public static final String SUCCESSFULLY_GET_MY_CERTIFICATES = "Successfully get my certificates";
+        public static final String SUCCESSFULLY_GET_DASHBOARD_STATISTICS = "Successfully get dashboard statistics";
+        public static final String SUCCESSFULLY_GET_TOP_REVIEWS = "Successfully get top reviews companies";
+        public static final String SUCCESSFULLY_GET_DASHBOARD_TRENDS = "Successfully get dashboard trends";
     }
 
     public static class Certificate {

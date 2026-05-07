@@ -458,6 +458,13 @@ public class ReviewService implements IReviewService {
     }
 
     @Override
+    public List<Long> getTop10CompanyIdsByRatingForMajor(Long majorId) {
+        return internshipDetailRepository.findTop10CompaniesByAverageRatingForMajor(majorId).stream()
+                .map(CompanyRatingProjection::getCompanyId)
+                .collect(Collectors.toList());
+    }
+
+    @Override
     public Map<Long, Long> getReviewCountsByCompanyIds(List<Long> companyIds) {
         if (companyIds == null || companyIds.isEmpty()) return Map.of();
 

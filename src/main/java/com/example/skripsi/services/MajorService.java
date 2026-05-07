@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -38,7 +39,26 @@ public class MajorService extends AbstractMasterDataService<Major, MajorResponse
 
     @Override
     public List<MajorOptionResponse> getAllMajorOptions() {
-        return majorRepository.findAllOptions();
+        List<Major> majors = majorRepository.findAllByActiveTrue();
+
+        if (majors == null || majors.isEmpty()) {
+            return List.of();
+        }
+
+        return majors.stream()
+                .map(major -> MajorOptionResponse.builder()
+                        .id(major.getMajorId())
+                        .name(major.getMajorName())
+                        .departmentId(major.getDepartment() != null ? major.getDepartment().getDeptId() : null)
+                        .departmentName(major.getDepartment() != null ? major.getDepartment().getDeptName() : null)
+                        .regionId(major.getRegion() != null ? major.getRegion().getRegionId() : null)
+                        .regionName(major.getRegion() != null ? major.getRegion().getRegionName() : null)
+                        .department(major.getDepartment() != null ? major.getDepartment().getDeptName() : null)
+                        .region(major.getRegion() != null ? major.getRegion().getRegionName() : null)
+                        .majorId(major.getMajorId())
+                        .majorName(major.getMajorName())
+                        .build())
+                .collect(Collectors.toList());
     }
 
     public MajorResponse createMajor(CreateMajorRequest request) {
@@ -51,7 +71,7 @@ public class MajorService extends AbstractMasterDataService<Major, MajorResponse
 
     @Override
     protected void validateBeforeCreate(CreateMajorRequest request) {
-        boolean isExists = majorRepository.existsByMajorNameIgnoreCase(request.getMajorName().trim());
+        boolean isExists = majorRepository.existsByMajorNameIgnoreCaseAndActiveTrue(request.getMajorName().trim());
 
         if (isExists) {
             throw new BadRequestExceptions("Major Name already exists!");

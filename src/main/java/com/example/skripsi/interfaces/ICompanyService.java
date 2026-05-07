@@ -32,7 +32,7 @@ public interface ICompanyService {
 
     List<CompanyOptionsResponse> searchCompanies(String search);
 
-    List<CompanyOptionsResponse> getTopCompaniesAvgRating();
+    List<CompanyOptionsResponse> getTopCompaniesAvgRating(Long userId);
 
     Boolean isCompanyRequestOwner(Long requestId, Long userId);
 

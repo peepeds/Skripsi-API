@@ -3,7 +3,10 @@ package com.example.skripsi.controllers;
 import com.example.skripsi.models.*;
 import com.example.skripsi.models.major.*;
 import com.example.skripsi.services.MajorService;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("major")
@@ -14,13 +17,9 @@ public class MajorController extends AbstractMasterDataController<MajorService, 
     }
 
     @GetMapping("/options")
-    public WebResponse<?> getAllMajorOptions() {
+    public ResponseEntity<Map<String, Object>> getAllMajorOptions() {
         var results = service.getAllMajorOptions();
-        return WebResponse.builder()
-                .success(true)
-                .message("Successfully Get Major")
-                .result(results)
-                .build();
+        return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", results));
     }
 
     @Override
