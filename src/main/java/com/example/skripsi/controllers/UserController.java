@@ -34,20 +34,6 @@ public class UserController {
                 return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", userResponses));
     }
 
-    @PostMapping("")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Map<String, Object>> createUser(@Valid @RequestBody CreateUserRequest request) {
-        var result = userService.createUserByAdmin(request);
-        return ResponseEntity.ok(Map.of("success", true, "message", "OK", "result", result));
-    }
-
-    @PatchMapping("/{userId}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Map<String, Object>> updateUser(@PathVariable Long userId, @RequestBody Map<String, Object> request) {
-        var result = userService.updateUser(userId, request);
-        return ResponseEntity.ok(Map.of("success", true, "message", "User updated", "result", result));
-    }
-
     @DeleteMapping("/{userId}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> deleteUser(@PathVariable Long userId) {

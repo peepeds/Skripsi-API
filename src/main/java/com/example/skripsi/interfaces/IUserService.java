@@ -12,8 +12,6 @@ import java.util.Optional;
 
 public interface IUserService {
     List<UserResponse> getAllUserByUserPrivilege();
-    UserResponse createUserByAdmin(CreateUserRequest request);
-    UserResponse updateUserByAdmin(Long userId, UpdateUserRequest request);
     UserResponse deleteUserByAdmin(Long userId);
     Boolean emailExists(String email);
     UserResponse getUserProfile();
