@@ -19,8 +19,6 @@ public interface ICategoryService {
 
     List<CategoryResponse> getCategoryResponse(boolean includeSubCategories, String categoryType);
 
-    Map<Long, String> getSubCategoryCategoryNameMap(List<Long> ids);
-
     CategoryResponse toResponse(Category category, boolean includeSubCategories);
 
     CursorPageResponse<CompanyOptionsResponse> getCompaniesBySubCategory(Long subCategoryId, Long cursor, int limit);

@@ -37,8 +37,8 @@ public class AuthController {
 
         return WebResponse.builder()
                 .success(true)
-                .message("Register success")
-                .result("Successfully Created Account")
+                .message(MessageConstants.Success.REGISTER_SUCCESS)
+                .result(MessageConstants.Success.SUCCESSFULLY_CREATED_ACCOUNT)
                 .build();
     }
 
@@ -61,7 +61,7 @@ public class AuthController {
 
         return WebResponse.builder()
                 .success(true)
-                .message("Login success")
+                .message(MessageConstants.Success.LOGIN_SUCCESS)
                 .result(Map.of("accessToken", result.getAccessToken()))
                 .build();
     }
@@ -71,14 +71,14 @@ public class AuthController {
         String refreshToken = extractRefreshTokenFromCookie(request);
 
         if (refreshToken == null) {
-            throw new BadRequestExceptions("Missing refresh token");
+            throw new BadRequestExceptions(MessageConstants.Auth.MISSING_REFRESH_TOKEN);
         }
 
         var result = authService.refresh(refreshToken);
 
         return WebResponse.builder()
                 .success(true)
-                .message("New access token created")
+                .message(MessageConstants.Success.NEW_ACCESS_TOKEN_CREATED)
                 .result(Map.of("accessToken", result.getAccessToken()))
                 .build();
     }
@@ -103,7 +103,7 @@ public class AuthController {
 
         return WebResponse.builder()
                 .success(true)
-                .message("Logout success")
+                .message(MessageConstants.Success.LOGOUT_SUCCESS)
                 .build();
     }
 

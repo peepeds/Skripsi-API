@@ -1,11 +1,7 @@
 package com.example.skripsi.controllers;
 
-import com.example.skripsi.entities.SubCategory;
-import com.example.skripsi.models.category.*;
+import com.example.skripsi.models.*;
 import com.example.skripsi.services.*;
-import jakarta.validation.Valid;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URLDecoder;
@@ -19,100 +15,52 @@ public class CategoryController {
         this.categoryService = categoryService;
     }
 
-    @PostMapping("/category")
-    @PreAuthorize("hasAnyRole('ADMIN')")
-    public ResponseEntity<java.util.Map<String, Object>> createCategory(@Valid @RequestBody CreateCategoryRequest request) {
-        var result = categoryService.createCategoryMasterData(request);
-        return ResponseEntity.ok(java.util.Map.of("success", true, "message", "OK", "result", result));
-    }
-
-    @PatchMapping("/category/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN')")
-    public ResponseEntity<java.util.Map<String, Object>> updateCategory(@PathVariable Integer id, @Valid @RequestBody UpdateCategoryRequest request) {
-        var result = categoryService.updateCategoryMasterData(id, request);
-        return ResponseEntity.ok(java.util.Map.of("success", true, "message", "OK", "result", result));
-    }
-
-    @DeleteMapping("/category/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN')")
-    public ResponseEntity<java.util.Map<String, Object>> deleteCategory(@PathVariable Integer id, @RequestBody(required = false) java.util.Map<String, Object> body) {
-        var result = categoryService.deleteCategoryMasterData(id, body);
-        return ResponseEntity.ok(java.util.Map.of("success", true, "message", "OK", "result", result));
-    }
-
-    @PostMapping("/subcategory")
-    @PreAuthorize("hasAnyRole('ADMIN')")
-    public ResponseEntity<java.util.Map<String, Object>> createSubCategory(@RequestBody java.util.Map<String, Object> body) {
-        var result = categoryService.createSubCategoryMasterData(body);
-        return ResponseEntity.ok(java.util.Map.of("success", true, "message", "OK", "result", result));
-    }
-
-    @PutMapping("/subcategory/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN')")
-    public ResponseEntity<java.util.Map<String, Object>> updateSubCategory(@PathVariable Long id, @RequestBody SubCategory request) {
-        var result = categoryService.updateSubCategory(id, request);
-        return ResponseEntity.ok(java.util.Map.of("success", true, "message", "Updated successfully", "result", result));
-    }
-
-    @DeleteMapping("/subcategory/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN')")
-    public ResponseEntity<java.util.Map<String, Object>> deleteSubCategory(@PathVariable Long id, @RequestBody(required = false) java.util.Map<String, Object> body) {
-        var result = categoryService.deleteSubCategoryMasterData(id, body);
-        return ResponseEntity.ok(java.util.Map.of("success", true, "message", "OK", "result", result));
-    }
-
     @GetMapping("/category")
-    public ResponseEntity<java.util.Map<String, Object>> getCategories(
+    public WebResponse<?> getCategories(
             @RequestParam(value = "IncludeSubCategories", defaultValue = "1") int includeSubCategories,
             @RequestParam(value = "type", defaultValue = "jobs") String categoryType) {
         boolean include = includeSubCategories == 1;
         var result = categoryService.getCategoryResponse(include, categoryType);
-        return ResponseEntity.ok(java.util.Map.of("success", true, "message", "OK", "result", result));
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully Get Categories data")
+                .result(result)
+                .build();
     }
 
     @GetMapping("/subcategory/{subCategoryName}/companies")
-    public ResponseEntity<java.util.Map<String, Object>> getCompaniesBySubCategory(
+    public WebResponse<?> getCompaniesBySubCategory(
             @PathVariable("subCategoryName") String subCategoryName,
             @RequestParam(value = "type", defaultValue = "companies") String type,
             @RequestParam(value = "cursor", required = false) Long cursor,
             @RequestParam(value = "limit", defaultValue = "10") int limit) {
         var result = categoryService.getCompaniesBySubCategoryName(subCategoryName, type, cursor, limit);
-        // Return a consistent shape. If service returned a CursorPageResponse,
-        // expose both the cursor object and a flat `items` list + `meta` for clients.
-        java.util.Map<String, Object> payload = new java.util.HashMap<>();
-        payload.put("success", true);
-        payload.put("message", "OK");
-
-        if (result instanceof com.example.skripsi.models.CursorPageResponse<?> page) {
-            // keep the original cursor object under `result` for clients that expect it
-            payload.put("result", page);
-            // add compatibility shortcuts
-            payload.put("items", page.getResult());
-            payload.put("meta", page.getMeta());
-        } else {
-            payload.put("result", result);
-        }
-
-        return ResponseEntity.ok(payload);
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully Get Companies by SubCategory data")
+                .result(result.getResult())
+                .meta(result.getMeta())
+                .build();
     }
 
     @GetMapping("/top-categories")
-    public ResponseEntity<java.util.Map<String, Object>> getTopCategories() {
+    public WebResponse<?> getTopCategories() {
         var result = categoryService.getTopSubCategories();
-        return ResponseEntity.ok(java.util.Map.of("success", true, "message", "OK", "result", result));
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully Get Top Categories data")
+                .result(result)
+                .build();
     }
 
     @GetMapping("/subcategory/{subCategoryName}/summary")
-    public ResponseEntity<java.util.Map<String, Object>> getSubCategorySummary(@PathVariable("subCategoryName") String subCategoryName) {
+    public WebResponse<?> getSubCategorySummary(@PathVariable("subCategoryName") String subCategoryName) {
         String decoded = URLDecoder.decode(subCategoryName, StandardCharsets.UTF_8);
         var result = categoryService.getSubCategorySummary(decoded);
-        return ResponseEntity.ok(java.util.Map.of("success", true, "message", "OK", "result", result));
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully Get SubCategory Summary data")
+                .result(result)
+                .build();
     }
-
-    @GetMapping("/subcategory")
-    public ResponseEntity<java.util.Map<String, Object>> getAllSubCategories() {
-        var result = categoryService.getAllSubCategories();
-        return ResponseEntity.ok(java.util.Map.of("success", true, "message", "OK", "result", result));
-    }
-
 }

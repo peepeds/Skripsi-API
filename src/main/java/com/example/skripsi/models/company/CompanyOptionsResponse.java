@@ -16,15 +16,12 @@ public class CompanyOptionsResponse {
     private String companyAbbreviation;
     private String website;
     private Boolean isPartner;
-    private String categoryName;
     private String subcategoryName;
     private String companySlug;
     private String bio;
     private Double rating;
     @Builder.Default
     private Long totalReviews = 0L;
-    @Builder.Default
-    private Long reviewCount = 0L;
 
     public CompanyOptionsResponse(Long companyId, String companyName, String companyAbbreviation, String companySlug) {
         this.companyId = companyId;

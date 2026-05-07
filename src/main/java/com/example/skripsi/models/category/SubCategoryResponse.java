@@ -10,8 +10,6 @@ import java.util.List;
 public class SubCategoryResponse {
     private Long subCategoryId;
     private String subCategoryName;
-    private Long categoryId;
-    private String categoryName;
     private List<JobListItemResponse> jobs;
 }
 
