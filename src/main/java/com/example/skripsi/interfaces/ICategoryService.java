@@ -1,9 +1,7 @@
 package com.example.skripsi.interfaces;
 
 import com.example.skripsi.entities.Category;
-import com.example.skripsi.models.category.CategoryResponse;
-import com.example.skripsi.models.category.SubCategorySummaryResponse;
-import com.example.skripsi.models.category.TopSubCategoryResponse;
+import com.example.skripsi.models.category.*;
 import com.example.skripsi.models.company.CompanyOptionsResponse;
 import com.example.skripsi.models.CursorPageResponse;
 
@@ -32,4 +30,12 @@ public interface ICategoryService {
     List<TopSubCategoryResponse> getTopSubCategories();
 
     SubCategorySummaryResponse getSubCategorySummary(String subCategoryName);
+
+    CategoryResponse addCategory(CreateCategoryRequest request);
+
+    CategoryResponse updateCategory(Long id, UpdateCategoryRequest request);
+
+    SubCategoryResponse addSubCategory(CreateSubCategoryRequest request);
+
+    SubCategoryResponse updateSubCategory(Long id, UpdateSubCategoryRequest request);
 }

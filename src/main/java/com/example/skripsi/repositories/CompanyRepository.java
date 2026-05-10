@@ -39,11 +39,10 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
             c.companySlug
         )
         FROM Company c
-        WHERE LOWER(c.companyName) LIKE LOWER(CONCAT(:search, '%'))
-            OR LOWER(c.companyAbbreviation) LIKE LOWER(CONCAT(:search, '%'))
+        WHERE c.companySlug LIKE CONCAT(:slug, '%')
         ORDER BY c.companyName ASC
     """)
-    List<CompanyOptionsResponse> searchCompanies(@Param("search") String search);
+    List<CompanyOptionsResponse> searchCompanies(@Param("slug") String slug);
 
     Company findByCompanySlug(String companySlug);
 
@@ -202,4 +201,105 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
             ORDER BY DATE_TRUNC('month', c.created_at) ASC
             """, nativeQuery = true)
     List<MonthlyCountProjection> countNewCompaniesPerMonthLast6Months();
+
+    @Query("""
+        SELECT new com.example.skripsi.models.company.CompanyMasterDataResponse(
+            c.companyId,
+            c.companyName,
+            c.companyAbbreviation,
+            c.companySlug,
+            c.createdAt,
+            c.createdBy,
+            c.updatedAt,
+            c.updatedBy,
+            cp.companyProfileId,
+            cp.bio,
+            cp.website,
+            cp.isPartner,
+            cp.subcategoryId,
+            sc.subCategoryName,
+            COUNT(DISTINCT ih.internshipHeaderId),
+            cp.createdAt,
+            cp.createdBy,
+            cp.updatedAt,
+            cp.updatedBy
+        )
+        FROM Company c
+        LEFT JOIN CompanyProfile cp ON cp.companyId = c.companyId
+        LEFT JOIN SubCategory sc ON sc.subCategoryId = cp.subcategoryId
+        LEFT JOIN InternshipHeader ih ON ih.companyId = c.companyId
+        WHERE (:cursor IS NULL OR c.companyId > :cursor)
+        GROUP BY c.companyId,
+                 c.companyName,
+                 c.companyAbbreviation,
+                 c.companySlug,
+                 c.createdAt,
+                 c.createdBy,
+                 c.updatedAt,
+                 c.updatedBy,
+                 cp.companyProfileId,
+                 cp.bio,
+                 cp.website,
+                 cp.isPartner,
+                 cp.subcategoryId,
+                 sc.subCategoryName,
+                 cp.createdAt,
+                 cp.createdBy,
+                 cp.updatedAt,
+                 cp.updatedBy
+        ORDER BY c.companyId ASC
+    """)
+    List<CompanyMasterDataResponse> findMasterDataFromCursor(
+            @Param("cursor") Long cursor,
+            Pageable pageable
+    );
+
+    @Query("""
+        SELECT new com.example.skripsi.models.company.CompanyMasterDataResponse(
+            c.companyId,
+            c.companyName,
+            c.companyAbbreviation,
+            c.companySlug,
+            c.createdAt,
+            c.createdBy,
+            c.updatedAt,
+            c.updatedBy,
+            cp.companyProfileId,
+            cp.bio,
+            cp.website,
+            cp.isPartner,
+            cp.subcategoryId,
+            sc.subCategoryName,
+            COUNT(DISTINCT ih.internshipHeaderId),
+            cp.createdAt,
+            cp.createdBy,
+            cp.updatedAt,
+            cp.updatedBy
+        )
+        FROM Company c
+        LEFT JOIN CompanyProfile cp ON cp.companyId = c.companyId
+        LEFT JOIN SubCategory sc ON sc.subCategoryId = cp.subcategoryId
+        LEFT JOIN InternshipHeader ih ON ih.companyId = c.companyId
+        WHERE LOWER(c.companyName) LIKE LOWER(CONCAT('%', :search, '%'))
+        GROUP BY c.companyId,
+                 c.companyName,
+                 c.companyAbbreviation,
+                 c.companySlug,
+                 c.createdAt,
+                 c.createdBy,
+                 c.updatedAt,
+                 c.updatedBy,
+                 cp.companyProfileId,
+                 cp.bio,
+                 cp.website,
+                 cp.isPartner,
+                 cp.subcategoryId,
+                 sc.subCategoryName,
+                 cp.createdAt,
+                 cp.createdBy,
+                 cp.updatedAt,
+                 cp.updatedBy
+        ORDER BY c.companyId ASC
+    """)
+    List<CompanyMasterDataResponse> searchMasterData(@Param("search") String search);
 }

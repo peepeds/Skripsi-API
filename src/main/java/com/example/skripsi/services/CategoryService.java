@@ -137,8 +137,7 @@ public class CategoryService implements ICategoryService {
                 .build();
     }
 
-    private CursorPageResponse<CompanyOptionsResponse> emptyCursorPageResponse() {
-        return CursorPageResponse.<CompanyOptionsResponse>builder()
+    private CursorPageResponse<CompanyOptionsResponse> emptyCursorPageResponse() {        return CursorPageResponse.<CompanyOptionsResponse>builder()
                 .result(List.of())
                 .meta(CursorPageResponse.Meta.builder()
                         .nextCursor(null)
@@ -176,6 +175,63 @@ public class CategoryService implements ICategoryService {
                 .totalReviews(summary != null ? summary.getTotalReviews() : 0L)
                 .avgRating(summary != null ? summary.getAvgRating() : null)
                 .totalPartnerCompanies(totalPartnerCompanies)
+                .build();
+    }
+
+    @Override
+    public CategoryResponse addCategory(CreateCategoryRequest request) {
+        Category category = Category.builder()
+                .categoryName(request.getCategoryName())
+                .categoryType(request.getCategoryType())
+                .build();
+        return toResponse(categoryRepository.save(category), false);
+    }
+
+    @Override
+    public CategoryResponse updateCategory(Long id, UpdateCategoryRequest request) {
+        Category category = categoryRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Category not found: " + id));
+
+        if (request.getCategoryName() != null) category.setCategoryName(request.getCategoryName());
+        if (request.getCategoryType() != null) category.setCategoryType(request.getCategoryType());
+
+        return toResponse(categoryRepository.save(category), false);
+    }
+
+    @Override
+    public SubCategoryResponse addSubCategory(CreateSubCategoryRequest request) {
+        Category category = categoryRepository.findById(request.getCategoryId())
+                .orElseThrow(() -> new ResourceNotFoundException("Category not found: " + request.getCategoryId()));
+
+        SubCategory subCategory = SubCategory.builder()
+                .subCategoryName(request.getSubCategoryName())
+                .category(category)
+                .build();
+        SubCategory saved = subCategoryRepository.save(subCategory);
+
+        return SubCategoryResponse.builder()
+                .subCategoryId(saved.getSubCategoryId())
+                .subCategoryName(saved.getSubCategoryName())
+                .build();
+    }
+
+    @Override
+    public SubCategoryResponse updateSubCategory(Long id, UpdateSubCategoryRequest request) {
+        SubCategory subCategory = subCategoryRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("SubCategory not found: " + id));
+
+        if (request.getSubCategoryName() != null) subCategory.setSubCategoryName(request.getSubCategoryName());
+        if (request.getCategoryId() != null) {
+            Category category = categoryRepository.findById(request.getCategoryId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Category not found: " + request.getCategoryId()));
+            subCategory.setCategory(category);
+        }
+
+        SubCategory saved = subCategoryRepository.save(subCategory);
+
+        return SubCategoryResponse.builder()
+                .subCategoryId(saved.getSubCategoryId())
+                .subCategoryName(saved.getSubCategoryName())
                 .build();
     }
 }

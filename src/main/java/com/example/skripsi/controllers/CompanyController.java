@@ -125,4 +125,48 @@ public class CompanyController {
                 .result(result)
                 .build();
     }
+
+    @GetMapping("/master-data")
+    @PreAuthorize("hasRole('ADMIN')")
+    public WebResponse<?> getCompanyMasterData(@RequestParam(value = "cursor", required = false) Long cursor,
+                                               @RequestParam(value = "limit", defaultValue = "15") int limit,
+                                               @RequestParam(value = "search", required = false) String search) {
+        if (search != null && !search.isEmpty()) {
+            var results = companyService.searchCompanyMasterData(search);
+            return WebResponse.builder()
+                    .success(true)
+                    .message("Successfully search company master data")
+                    .result(results)
+                    .build();
+        }
+        var results = companyService.getCompanyMasterData(cursor, limit);
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully get company master data")
+                .meta(results.getMeta())
+                .result(results.getResult())
+                .build();
+    }
+
+    @PostMapping("/create")
+    @PreAuthorize("hasRole('ADMIN')")
+    public WebResponse<?> createCompanyDirect(@Valid @RequestBody CreateCompanyRequestRequest request) {
+        var result = companyService.createCompany(request);
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully created company")
+                .result(result)
+                .build();
+    }
+
+    @PatchMapping("/{companyId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public WebResponse<?> updateCompany(@PathVariable Long companyId,
+                                        @Valid @RequestBody UpdateCompanyRequest request) {
+        companyService.updateCompany(companyId, request);
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully updated company")
+                .build();
+    }
 }

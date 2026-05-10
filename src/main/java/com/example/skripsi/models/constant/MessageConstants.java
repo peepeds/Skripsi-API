@@ -20,6 +20,8 @@ public class MessageConstants {
 
     public static class NotFound {
         public static final String REQUEST_DOCUMENT_NOT_FOUND = "Request document not found";
+        public static final String COMPANY_NOT_FOUND = "Company not found";
+        public static final String COMPANY_PROFILE_NOT_FOUND = "Company profile not found";
         public static final String COMPANY_REQUEST_NOT_FOUND = "Company request not found";
         public static final String NOTIFICATION_NOT_FOUND = "Notification not found for company request";
         public static final String USER_PROFILE_NOT_FOUND = "User profile not found";

@@ -1,7 +1,10 @@
 package com.example.skripsi.controllers;
 
 import com.example.skripsi.models.*;
+import com.example.skripsi.models.category.*;
 import com.example.skripsi.services.*;
+import jakarta.validation.Valid;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URLDecoder;
@@ -60,6 +63,50 @@ public class CategoryController {
         return WebResponse.builder()
                 .success(true)
                 .message("Successfully Get SubCategory Summary data")
+                .result(result)
+                .build();
+    }
+
+    @PostMapping("/category")
+    @PreAuthorize("hasAnyRole('ADMIN')")
+    public WebResponse<?> addCategory(@Valid @RequestBody CreateCategoryRequest request) {
+        var result = categoryService.addCategory(request);
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully Add Category")
+                .result(result)
+                .build();
+    }
+
+    @PatchMapping("/category/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN')")
+    public WebResponse<?> updateCategory(@PathVariable Long id, @Valid @RequestBody UpdateCategoryRequest request) {
+        var result = categoryService.updateCategory(id, request);
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully Update Category")
+                .result(result)
+                .build();
+    }
+
+    @PostMapping("/subcategory")
+    @PreAuthorize("hasAnyRole('ADMIN')")
+    public WebResponse<?> addSubCategory(@Valid @RequestBody CreateSubCategoryRequest request) {
+        var result = categoryService.addSubCategory(request);
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully Add SubCategory")
+                .result(result)
+                .build();
+    }
+
+    @PatchMapping("/subcategory/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN')")
+    public WebResponse<?> updateSubCategory(@PathVariable Long id, @Valid @RequestBody UpdateSubCategoryRequest request) {
+        var result = categoryService.updateSubCategory(id, request);
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully Update SubCategory")
                 .result(result)
                 .build();
     }
