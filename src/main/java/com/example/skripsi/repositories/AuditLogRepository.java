@@ -12,4 +12,3 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
     Optional<AuditLog> findTopByEntityTypeAndEntityIdAndActionInOrderByTimestampDesc(
             String entityType, Long entityId, List<String> actions);
 }
-

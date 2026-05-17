@@ -26,4 +26,3 @@ public interface CompanyRequestRepository extends JpaRepository<CompanyRequest, 
     @Query("SELECT cr FROM CompanyRequest cr WHERE cr.status = :status AND (:cursor IS NULL OR cr.companyRequestId > :cursor) ORDER BY cr.companyRequestId ASC")
     List<CompanyRequest> findPageByStatusFromCursor(@Param("status") CompanyRequestStatus status, @Param("cursor") Long cursor, Pageable pageable);
 }
-
