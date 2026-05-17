@@ -33,6 +33,49 @@ Mengambil daftar semua pengguna dengan privilege `USER`.
 
 ---
 
+## GET /user/all-user
+
+**Autentikasi**: Hanya ADMIN
+
+Mengambil daftar semua pengguna dengan cursor pagination.
+
+### Query Parameters
+
+| Parameter | Tipe | Wajib | Default | Keterangan |
+|-----------|------|-------|---------|------------|
+| cursor    | long | Tidak | -       | Cursor user terakhir dari halaman sebelumnya |
+| limit     | int  | Tidak | 15      | Jumlah data maksimum per halaman |
+
+### Contoh Response
+
+```json
+{
+  "success": true,
+  "message": "Successfully get all users",
+  "meta": {
+    "nextCursor": 16,
+    "previousCursor": null,
+    "size": 15,
+    "hasMore": true
+  },
+  "result": [
+    {
+      "fullName": "Budi Santoso",
+      "email": "budi@mahasiswa.ac.id",
+      "role": "admin",
+      "regionName": "Jawa Barat",
+      "deptName": "Teknik",
+      "majorName": "Teknik Informatika",
+      "registeredAt": "2026-04-28T10:27:04.004+07:00"
+    }
+  ]
+}
+```
+
+Jika user tidak memiliki data role di tabel `user_roles`, field `role` akan bernilai `user`.
+
+---
+
 ## GET /user/me
 
 **Autentikasi**: Harus login

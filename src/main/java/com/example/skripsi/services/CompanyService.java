@@ -39,6 +39,7 @@ public class CompanyService implements ICompanyService {
     private final ICategoryService categoryService;
     private final IReviewService reviewService;
     private final NotificationHelper notificationHelper;
+    private final UserProfileRepository userProfileRepository;
 
     public CompanyService(CompanyRepository companyRepository,
                           CompanyRequestRepository companyRequestRepository,
@@ -49,7 +50,8 @@ public class CompanyService implements ICompanyService {
                           CompanySaveRepository companySaveRepository,
                           @Lazy ICategoryService categoryService,
                           @Lazy IReviewService reviewService,
-                          NotificationHelper notificationHelper) {
+                          NotificationHelper notificationHelper,
+                          UserProfileRepository userProfileRepository) {
         this.companyRepository = companyRepository;
         this.companyRequestRepository = companyRequestRepository;
         this.auditService = auditService;
@@ -58,6 +60,7 @@ public class CompanyService implements ICompanyService {
         this.companyProfileRepository = companyProfileRepository;
         this.companySaveRepository = companySaveRepository;
         this.categoryService = categoryService;
+        this.userProfileRepository = userProfileRepository;
         this.reviewService = reviewService;
         this.notificationHelper = notificationHelper;
     }
@@ -221,10 +224,15 @@ public class CompanyService implements ICompanyService {
     public CompanyRequestDetailResponse getCompanyRequestDetail(Long requestId) {
         Long currentUserId = securityUtils.getCurrentUserId();
 
+         boolean isAdmin = securityUtils.hasRole("ADMIN");
+         boolean isOwner = companyRequestRepository.findById(requestId)
+                 .map(req -> req.getCreatedBy().equals(currentUserId))
+                 .orElse(false);
+
         CompanyRequest companyRequest = companyRequestRepository.findById(requestId)
                 .orElseThrow(() -> new BadRequestExceptions(MessageConstants.NotFound.COMPANY_REQUEST_NOT_FOUND));
 
-        if (!companyRequest.getCreatedBy().equals(currentUserId)) {
+        if (!isAdmin && !isOwner) {
             throw new CustomAccessDeniedException(MessageConstants.NotFound.ACCESS_DENIED_OWN_REQUESTS);
         }
 
@@ -234,7 +242,8 @@ public class CompanyService implements ICompanyService {
     @Override
     public List<CompanyOptionsResponse> searchCompanies(String search) {
         log.info("[searchCompanies] search={}", search);
-        List<CompanyOptionsResponse> searchResults = companyRepository.searchCompanies(search);
+        String slug = search.trim().toLowerCase().replaceAll("\\s+", "-");
+        List<CompanyOptionsResponse> searchResults = companyRepository.searchCompanies(slug);
 
         if (searchResults.isEmpty()) {
             return searchResults;
@@ -258,8 +267,8 @@ public class CompanyService implements ICompanyService {
     }
 
     @Override
-    public List<CompanyOptionsResponse> getTopCompaniesAvgRating() {
-        List<Long> companyIds = reviewService.getTop10CompanyIdsByRating();
+    public List<CompanyOptionsResponse> getTopCompaniesAvgRating(Long userId) {
+        List<Long> companyIds = resolveTopCompanyIds(userId);
 
         if (companyIds.isEmpty()) {
             return List.of();
@@ -275,6 +284,32 @@ public class CompanyService implements ICompanyService {
                 .filter(Objects::nonNull)
                 .map(company -> toOptionsResponse(company, enrichment))
                 .collect(Collectors.toList());
+    }
+
+    private List<Long> resolveTopCompanyIds(Long userId) {
+        if (userId == null) {
+            return reviewService.getTop10CompanyIdsByRating();
+        }
+
+        Long majorId = userProfileRepository.findByUserUserId(userId)
+                .map(profile -> profile.getMajor().getMajorId().longValue())
+                .orElse(null);
+
+        if (majorId == null) {
+            return reviewService.getTop10CompanyIdsByRating();
+        }
+
+        List<Long> majorFiltered = reviewService.getTop10CompanyIdsByRatingForMajor(majorId);
+        List<Long> global = reviewService.getTop10CompanyIdsByRating();
+
+        List<Long> merged = new java.util.ArrayList<>(majorFiltered);
+        for (Long id : global) {
+            if (!majorFiltered.contains(id)) {
+                merged.add(id);
+                if (merged.size() == 10) break;
+            }
+        }
+        return merged;
     }
 
     @Override
@@ -378,6 +413,126 @@ public class CompanyService implements ICompanyService {
     public Map<Long, Company> getCompanyInfoByIds(List<Long> companyIds) {
         return companyRepository.findAllById(companyIds).stream()
                 .collect(Collectors.toMap(Company::getCompanyId, c -> c));
+    }
+
+    @Override
+    public CursorPageResponse<CompanyMasterDataResponse> getCompanyMasterData(Long cursor, int limit) {
+        log.info("[getCompanyMasterData] cursor={} limit={}", cursor, limit);
+        Pageable pageable = PageRequest.of(0, limit + 1);
+
+        List<CompanyMasterDataResponse> rows = companyRepository.findMasterDataFromCursor(cursor, pageable);
+
+        boolean hasMore = rows.size() > limit;
+        List<CompanyMasterDataResponse> results = hasMore ? rows.subList(0, limit) : rows;
+
+        Long nextCursor = hasMore && !results.isEmpty()
+                ? results.get(results.size() - 1).getCompanyId()
+                : null;
+
+        return CursorPageResponse.<CompanyMasterDataResponse>builder()
+                .result(results)
+                .meta(CursorPageResponse.Meta.builder()
+                        .nextCursor(nextCursor)
+                        .previousCursor(cursor)
+                        .size(results.size())
+                        .hasMore(hasMore)
+                        .build())
+                .build();
+    }
+
+    @Override
+    public List<CompanyMasterDataResponse> searchCompanyMasterData(String search) {
+        log.info("[searchCompanyMasterData] search={}", search);
+        return companyRepository.searchMasterData(search);
+    }
+
+    @Override
+    public void updateCompany(Long companyId, UpdateCompanyRequest request) {
+        Long adminId = securityUtils.getCurrentUserId();
+        log.info("[updateCompany] companyId={} adminId={}", companyId, adminId);
+
+        Company company = companyRepository.findById(companyId)
+                .orElseThrow(() -> new BadRequestExceptions(MessageConstants.NotFound.COMPANY_NOT_FOUND));
+
+        CompanyProfile profile = companyProfileRepository.findByCompanyId(companyId);
+        if (profile == null) {
+            throw new BadRequestExceptions(MessageConstants.NotFound.COMPANY_PROFILE_NOT_FOUND);
+        }
+
+        if (request.getCompanyName() != null) {
+            company.setCompanyName(request.getCompanyName());
+            company.setCompanySlug(request.getCompanyName().toLowerCase().replaceAll("\\s+", "-"));
+        }
+        if (request.getCompanyAbbreviation() != null) {
+            company.setCompanyAbbreviation(request.getCompanyAbbreviation());
+        }
+        company.setUpdatedAt(OffsetDateTime.now());
+        company.setUpdatedBy(adminId);
+        companyRepository.save(company);
+
+        if (request.getBio() != null) {
+            profile.setBio(request.getBio());
+        }
+        if (request.getWebsite() != null) {
+            profile.setWebsite(request.getWebsite());
+        }
+        if (request.getSubcategoryId() != null) {
+            profile.setSubcategoryId(request.getSubcategoryId());
+        }
+        if (request.getIsPartner() != null) {
+            profile.setIsPartner(request.getIsPartner());
+        }
+        profile.setUpdatedAt(OffsetDateTime.now());
+        profile.setUpdatedBy(adminId);
+        companyProfileRepository.save(profile);
+
+        log.info("[updateCompany] done companyId={}", companyId);
+    }
+
+    @Override
+    public CompanyMasterDataResponse createCompany(CreateCompanyRequestRequest request) {
+        Long adminId = securityUtils.getCurrentUserId();
+        log.info("[createCompany] adminId={} companyName={}", adminId, request.getCompanyName());
+
+        Company savedCompany = companyRepository.save(Company.builder()
+                .companyName(request.getCompanyName())
+                .companyAbbreviation(request.getCompanyAbbreviation())
+                .companySlug(request.getCompanyName().toLowerCase().replaceAll("\\s+", "-"))
+                .createdAt(OffsetDateTime.now())
+                .createdBy(adminId)
+                .build());
+
+        CompanyProfile savedProfile = companyProfileRepository.save(CompanyProfile.builder()
+                .companyId(savedCompany.getCompanyId())
+                .bio(request.getBio())
+                .website(request.getWebsite())
+                .isPartner(request.getIsPartner() != null ? request.getIsPartner() : false)
+                .subcategoryId(request.getSubcategoryId())
+                .createdAt(OffsetDateTime.now())
+                .createdBy(adminId)
+                .build());
+
+        String subcategoryName = categoryService.getSubCategoryNameMap(List.of(request.getSubcategoryId()))
+                .get(request.getSubcategoryId());
+
+        log.info("[createCompany] done companyId={}", savedCompany.getCompanyId());
+
+        return CompanyMasterDataResponse.builder()
+                .companyId(savedCompany.getCompanyId())
+                .companyName(savedCompany.getCompanyName())
+                .companyAbbreviation(savedCompany.getCompanyAbbreviation())
+                .companySlug(savedCompany.getCompanySlug())
+                .companyCreatedAt(savedCompany.getCreatedAt())
+                .companyCreatedBy(savedCompany.getCreatedBy())
+                .companyProfileId(savedProfile.getCompanyProfileId())
+                .bio(savedProfile.getBio())
+                .website(savedProfile.getWebsite())
+                .isPartner(savedProfile.getIsPartner())
+                .subcategoryId(savedProfile.getSubcategoryId())
+                .subcategoryName(subcategoryName)
+                .profileCreatedAt(savedProfile.getCreatedAt())
+                .profileCreatedBy(savedProfile.getCreatedBy())
+                .build();
     }
 
     @Override

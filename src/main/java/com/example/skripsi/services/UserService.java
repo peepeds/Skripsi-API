@@ -4,8 +4,11 @@ import com.example.skripsi.configs.*;
 import com.example.skripsi.entities.*;
 import com.example.skripsi.exceptions.*;
 import com.example.skripsi.interfaces.*;
+import com.example.skripsi.models.CursorPageResponse;
 import com.example.skripsi.models.user.*;
 import com.example.skripsi.models.constant.*;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import com.example.skripsi.repositories.*;
 import com.example.skripsi.securities.*;
 import jakarta.transaction.Transactional;
@@ -31,10 +34,13 @@ public class UserService implements IUserService {
     private final UserNotificationRepository userNotificationRepository;
     private final UserCertificateRequestRepository userCertificateRequestRepository;
     private final AuditService auditService;
+    private final AuditLogRepository auditLogRepository;
     private final UserCertificatesRepository userCertificatesRepository;
     private final MinioConfig minioConfig;
     private final IMinioService minioService;
     private final CompanyRepository companyRepository;
+    private final RoleRepository roleRepository;
+    private final UserRoleRepository userRoleRepository;
 
     public UserService(UserRepository userRepository,
                        UserProfileRepository userProfileRepository,
@@ -43,10 +49,13 @@ public class UserService implements IUserService {
                        UserNotificationRepository userNotificationRepository,
                        UserCertificateRequestRepository userCertificateRequestRepository,
                        @Lazy AuditService auditService,
+                       AuditLogRepository auditLogRepository,
                        UserCertificatesRepository userCertificatesRepository,
                        MinioConfig minioConfig,
                        IMinioService minioService,
-                       CompanyRepository companyRepository){
+                       CompanyRepository companyRepository,
+                       RoleRepository roleRepository,
+                       UserRoleRepository userRoleRepository){
         this.userProfileRepository = userProfileRepository;
         this.userRepository = userRepository;
         this.securityUtils = securityUtils;
@@ -54,10 +63,13 @@ public class UserService implements IUserService {
         this.userNotificationRepository = userNotificationRepository;
         this.userCertificateRequestRepository = userCertificateRequestRepository;
         this.auditService = auditService;
+        this.auditLogRepository = auditLogRepository;
         this.userCertificatesRepository = userCertificatesRepository;
         this.minioConfig = minioConfig;
         this.minioService = minioService;
         this.companyRepository = companyRepository;
+        this.roleRepository = roleRepository;
+        this.userRoleRepository = userRoleRepository;
     }
 
     @Override
@@ -95,6 +107,29 @@ public class UserService implements IUserService {
 
     public Boolean emailExists(String email){
         return userRepository.findByEmail(email).isPresent();
+    }
+
+    @Override
+    public void setUserAsAdmin(Long userId) {
+        log.info("[setUserAsAdmin] userId={}", userId);
+
+        userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        Role adminRole = roleRepository.findByRoleNameIgnoreCase("ADMIN")
+                .orElseThrow(() -> new ResourceNotFoundException("Role ADMIN not found"));
+
+        boolean alreadyAdmin = userRoleRepository.existsByUserIdAndRoleId(userId, adminRole.getRoleId());
+        if (alreadyAdmin) {
+            throw new BadRequestExceptions("User is already admin");
+        }
+
+        UserRole userRole = UserRole.builder()
+                .userId(userId)
+                .roleId(adminRole.getRoleId())
+                .build();
+        userRoleRepository.save(userRole);
+        log.info("[setUserAsAdmin] success userId={} roleId={}", userId, adminRole.getRoleId());
     }
 
     @Override
@@ -240,6 +275,11 @@ public class UserService implements IUserService {
     public CertificateRequestDetailResponse getCertificateRequestDetail(Long requestId) {
         Long currentUserId = securityUtils.getCurrentUserId();
 
+        boolean isAdmin = securityUtils.hasRole("ADMIN");
+        boolean isOwner = userCertificateRequestRepository.findById(requestId)
+                .map(req -> req.getCreatedBy().equals(currentUserId))
+                .orElse(false);
+
         UserCertificateRequest userCertificateRequest = userCertificateRequestRepository.findById(requestId)
                 .orElseThrow(() -> new InvalidCredentialsException("Request document not found"));
 
@@ -249,9 +289,8 @@ public class UserService implements IUserService {
             throw new InvalidCredentialsException("Invalid notification type");
         }
 
-        // Only the owner of the request may view its detail
 
-        if (!userCertificateRequest.getCreatedBy().equals(currentUserId)) {
+        if (!isAdmin && !isOwner) {
             throw new CustomAccessDeniedException("Access denied: you can only view your own certificate requests");
         }
 
@@ -339,6 +378,112 @@ public class UserService implements IUserService {
                             .build();
                 })
                 .toList();
+    }
+
+    @Override
+    public CursorPageResponse<CertificateRequestListResponse> getCertificateRequests(String status, Long cursor, int limit) {
+        log.info("[getCertificateRequests] status={} cursor={} limit={}", status, cursor, limit);
+        Pageable pageable = PageRequest.of(0, limit + 1);
+        List<UserCertificateRequest> requests = status == null
+                ? userCertificateRequestRepository.findPageFromCursor(cursor, pageable)
+                : userCertificateRequestRepository.findPageByStatusFromCursor(status, cursor, pageable);
+
+        boolean hasMore = requests.size() > limit;
+        List<UserCertificateRequest> pageRequests = hasMore ? requests.subList(0, limit) : requests;
+
+        List<CertificateRequestListResponse> items = pageRequests.stream()
+                .map(this::toCertificateRequestListResponse)
+                .collect(Collectors.toList());
+
+        Long nextCursor = hasMore && !items.isEmpty()
+                ? pageRequests.get(pageRequests.size() - 1).getDocumentId()
+                : null;
+
+        return CursorPageResponse.<CertificateRequestListResponse>builder()
+                .result(items)
+                .meta(CursorPageResponse.Meta.builder()
+                        .nextCursor(nextCursor)
+                        .previousCursor(cursor)
+                        .size(items.size())
+                        .hasMore(hasMore)
+                        .build())
+                .build();
+    }
+
+    @Override
+    public CursorPageResponse<AllUserCursorItemResponse> getAllUsersCursor(Long cursor, int limit, String search) {
+        String normalizedSearch = Optional.ofNullable(search)
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .orElse(null);
+        String searchPattern = normalizedSearch == null ? "%" : normalizedSearch + "%";
+
+        log.info("[getAllUsersCursor] cursor={} limit={} search={}", cursor, limit, normalizedSearch);
+        Pageable pageable = PageRequest.of(0, limit + 1);
+        List<AllUserCursorProjection> users = userRepository.findAllUsersFromCursor(cursor, searchPattern, pageable);
+
+        boolean hasMore = users.size() > limit;
+        List<AllUserCursorProjection> pageUsers = hasMore ? users.subList(0, limit) : users;
+
+        List<AllUserCursorItemResponse> items = pageUsers.stream()
+                .map(this::toAllUserCursorItemResponse)
+                .toList();
+
+        Long nextCursor = hasMore && !pageUsers.isEmpty()
+                ? pageUsers.get(pageUsers.size() - 1).getUserId()
+                : null;
+
+        return CursorPageResponse.<AllUserCursorItemResponse>builder()
+                .result(items)
+                .meta(CursorPageResponse.Meta.builder()
+                        .nextCursor(nextCursor)
+                        .previousCursor(cursor)
+                        .size(items.size())
+                        .hasMore(hasMore)
+                        .build())
+                .build();
+    }
+
+    private CertificateRequestListResponse toCertificateRequestListResponse(UserCertificateRequest req) {
+        boolean isReviewed = req.getUploadedAt() != null;
+        Notification notification = req.getNotification();
+
+        AuditLog reviewLog = auditLogRepository
+                .findTopByEntityTypeAndEntityIdAndActionInOrderByTimestampDesc(
+                        EntityTypeConstants.UPLOAD_CERTIFICATES,
+                        req.getDocumentId(),
+                        List.of(ActionConstants.APPROVED, ActionConstants.REJECTED))
+                .orElse(null);
+
+        return CertificateRequestListResponse.builder()
+                .requestId(req.getDocumentId())
+                .certificateName(req.getDocumentName())
+                .status(req.getStatus())
+                .createdAt(req.getCreatedAt())
+                .submittedBy(resolveUserName(req.getCreatedBy()))
+                .reviewedAt(isReviewed ? req.getUploadedAt() : null)
+                .reviewedBy(isReviewed && notification != null ? resolveUserName(notification.getActorId()) : null)
+                .reviewNote(reviewLog != null ? reviewLog.getNotes() : null)
+                .build();
+    }
+
+    private AllUserCursorItemResponse toAllUserCursorItemResponse(AllUserCursorProjection user) {
+        return AllUserCursorItemResponse.builder()
+                .userId(user.getUserId())
+                .fullName(buildFullName(user.getFirstName(), user.getLastName()))
+                .email(user.getEmail())
+                .role(Optional.ofNullable(user.getRole()).orElse("USER").toLowerCase())
+                .regionName(user.getRegionName())
+                .deptName(user.getDeptName())
+                .majorName(user.getMajorName())
+                .registeredAt(user.getRegisteredAt())
+                .build();
+    }
+
+    private String buildFullName(String firstName, String lastName) {
+        String first = Optional.ofNullable(firstName).orElse("").trim();
+        String last = Optional.ofNullable(lastName).orElse("").trim();
+        return (first + " " + last).trim();
     }
 
     private UserResponse toResponse(User user, UserProfile profile) {
@@ -432,6 +577,16 @@ public class UserService implements IUserService {
             log.warn("[getCertificateRequestDetail] failed to generate presigned url for requestId={}", userCertificateRequest.getDocumentId(), e);
             documentUrl = buildMinioProxyUrl(userCertificateRequest.getDocumentUrl());
         }
+
+        AuditLog reviewLog = auditLogRepository
+                .findTopByEntityTypeAndEntityIdAndActionInOrderByTimestampDesc(
+                        EntityTypeConstants.UPLOAD_CERTIFICATES,
+                        userCertificateRequest.getDocumentId(),
+                        List.of(ActionConstants.APPROVED, ActionConstants.REJECTED))
+                .orElse(null);
+
+        boolean isReviewed = userCertificateRequest.getUploadedAt() != null;
+
         return CertificateRequestDetailResponse.builder()
                 .requestDetails(CertificateRequestDetailResponse.RequestDetails.builder()
                         .requestId(userCertificateRequest.getDocumentId())
@@ -443,9 +598,9 @@ public class UserService implements IUserService {
                         .build())
                 .reviewInformation(CertificateRequestDetailResponse.ReviewInformation.builder()
                         .status(userCertificateRequest.getStatus())
-                        .reviewedAt(userCertificateRequest.getUploadedAt())
-                        .reviewNote(null)
-                        .reviewedBy(userCertificateRequest.getUploadedAt() != null ? resolveUserName(notification.getActorId()) : null)
+                        .reviewedAt(isReviewed ? userCertificateRequest.getUploadedAt() : null)
+                        .reviewedBy(isReviewed ? resolveUserName(notification.getActorId()) : null)
+                        .reviewNote(reviewLog != null ? reviewLog.getNotes() : null)
                         .build())
                 .build();
     }

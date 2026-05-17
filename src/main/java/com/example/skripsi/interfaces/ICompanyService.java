@@ -32,7 +32,7 @@ public interface ICompanyService {
 
     List<CompanyOptionsResponse> searchCompanies(String search);
 
-    List<CompanyOptionsResponse> getTopCompaniesAvgRating();
+    List<CompanyOptionsResponse> getTopCompaniesAvgRating(Long userId);
 
     Boolean isCompanyRequestOwner(Long requestId, Long userId);
 
@@ -41,4 +41,12 @@ public interface ICompanyService {
     CursorPageResponse<CompanyOptionsResponse> getMyBookmarks(Long cursor, int limit);
 
     Map<Long, Company> getCompanyInfoByIds(List<Long> companyIds);
+
+    CursorPageResponse<CompanyMasterDataResponse> getCompanyMasterData(Long cursor, int limit);
+
+    List<CompanyMasterDataResponse> searchCompanyMasterData(String search);
+
+    void updateCompany(Long companyId, UpdateCompanyRequest request);
+
+    CompanyMasterDataResponse createCompany(CreateCompanyRequestRequest request);
 }
