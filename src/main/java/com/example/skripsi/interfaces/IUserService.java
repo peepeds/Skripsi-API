@@ -17,10 +17,12 @@ public interface IUserService {
     String resolveUserName(Long userId);
     Map<Long, String> getUserNameMap(List<Long> userIds);
     Boolean userExists(Long userId);
+    void setUserAsAdmin(Long userId);
     Optional<User> findUserById(Long userId);
     List<Notification> findNotificationsByTypeAndReferenceId(String type, Long referenceId);
     List<UserCertificateRequest> findUserCertificateRequestsByNotificationId(Long notificationId);
     Boolean isCertificateRequestOwner(Long requestId, Long userId);
     List<CertificateResponse> getMyCertificates();
     CursorPageResponse<CertificateRequestListResponse> getCertificateRequests(String status, Long cursor, int limit);
+    CursorPageResponse<AllUserCursorItemResponse> getAllUsersCursor(Long cursor, int limit, String search);
 }

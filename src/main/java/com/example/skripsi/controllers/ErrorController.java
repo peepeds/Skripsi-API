@@ -34,7 +34,7 @@ public class ErrorController {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(WebResponse.<String>builder()
                         .success(false)
-                        .message("Access Denied")
+                        .message(ex.getMessage())
                         .build());
     }
 
@@ -44,7 +44,7 @@ public class ErrorController {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(WebResponse.<String>builder()
                         .success(false)
-                        .message("Access Denied")
+                        .message(ex.getMessage())
                         .build());
     }
 

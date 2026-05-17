@@ -21,11 +21,13 @@ public class AuditService implements IAuditService {
     private final AuditLogRepository auditLogRepository;
     private final ICompanyService companyService;
     private final IUserService userService;
+    private final com.example.skripsi.securities.SecurityUtils securityUtils;
 
-    public AuditService(AuditLogRepository auditLogRepository, ICompanyService companyService, IUserService userService) {
+    public AuditService(AuditLogRepository auditLogRepository, ICompanyService companyService, IUserService userService, com.example.skripsi.securities.SecurityUtils securityUtils) {
         this.auditLogRepository = auditLogRepository;
         this.companyService = companyService;
         this.userService = userService;
+        this.securityUtils = securityUtils;
     }
 
     @Override
@@ -40,10 +42,12 @@ public class AuditService implements IAuditService {
             throw new BadRequestExceptions(MessageConstants.Validation.UNKNOWN_ENTITY_TYPE + entity);
         }
 
+        boolean isAdmin = securityUtils.hasRole("ADMIN");
+
         if (EntityTypeConstants.COMPANY_REQUEST.equals(entityUpper)) {
             Boolean isOwner = companyService.isCompanyRequestOwner(id, currentUserId);
 
-            if (!isOwner) {
+            if (!isAdmin && !isOwner) {
                 throw new CustomAccessDeniedException(MessageConstants.NotFound.ACCESS_DENIED_OWN_AUDIT_LOGS);
             }
         }
@@ -51,7 +55,7 @@ public class AuditService implements IAuditService {
         if (EntityTypeConstants.UPLOAD_CERTIFICATES.equals(entityUpper)) {
             Boolean isOwner = userService.isCertificateRequestOwner(id, currentUserId);
 
-            if (!isOwner) {
+            if (!isAdmin && !isOwner) {
                 throw new CustomAccessDeniedException(MessageConstants.NotFound.ACCESS_DENIED_OWN_AUDIT_LOGS);
             }
         }

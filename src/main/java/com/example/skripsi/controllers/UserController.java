@@ -38,6 +38,33 @@ public class UserController {
                 .build();
     }
 
+    @GetMapping("/all-user")
+    @PreAuthorize("hasRole('ADMIN')")
+    public WebResponse<?> getAllUsers(
+            @RequestParam(value = "cursor", required = false) Long cursor,
+            @RequestParam(value = "limit", defaultValue = "15") int limit,
+            @RequestParam(value = "search", required = false) String search
+    ) {
+        var results = userService.getAllUsersCursor(cursor, limit, search);
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully get all users")
+                .meta(results.getMeta())
+                .result(results.getResult())
+                .build();
+    }
+
+    @PatchMapping("/set-admin/{userid}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public WebResponse<?> setUserAsAdmin(@PathVariable("userid") Long userId) {
+        userService.setUserAsAdmin(userId);
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully set user as admin")
+                .result(Map.of("userId", userId))
+                .build();
+    }
+
     @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
     public WebResponse<?> checkIdentity() {

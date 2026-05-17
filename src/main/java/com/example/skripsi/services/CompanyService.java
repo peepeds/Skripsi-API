@@ -224,10 +224,15 @@ public class CompanyService implements ICompanyService {
     public CompanyRequestDetailResponse getCompanyRequestDetail(Long requestId) {
         Long currentUserId = securityUtils.getCurrentUserId();
 
+         boolean isAdmin = securityUtils.hasRole("ADMIN");
+         boolean isOwner = companyRequestRepository.findById(requestId)
+                 .map(req -> req.getCreatedBy().equals(currentUserId))
+                 .orElse(false);
+
         CompanyRequest companyRequest = companyRequestRepository.findById(requestId)
                 .orElseThrow(() -> new BadRequestExceptions(MessageConstants.NotFound.COMPANY_REQUEST_NOT_FOUND));
 
-        if (!companyRequest.getCreatedBy().equals(currentUserId)) {
+        if (!isAdmin && !isOwner) {
             throw new CustomAccessDeniedException(MessageConstants.NotFound.ACCESS_DENIED_OWN_REQUESTS);
         }
 

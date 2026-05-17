@@ -36,4 +36,16 @@ public class SecurityUtils {
 
         return user.email();
     }
+
+    public boolean hasRole(String role) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+
+        if (auth == null || auth.getAuthorities() == null) {
+            return false;
+        }
+
+        String rolePrefix = "ROLE_" + role;
+        return auth.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals(rolePrefix));
+    }
 }
