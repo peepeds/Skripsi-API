@@ -63,7 +63,7 @@ public class ReviewController {
             @PathVariable String slug,
             @RequestParam(value = "order", defaultValue = "popular") String order,
             @RequestParam(value = "cursor", required = false) Long cursor,
-            @RequestParam(value = "limit", defaultValue = "10") int limit) {
+            @RequestParam(value = "limit", defaultValue = "15") int limit) {
         var result = reviewService.getCompanyReviews(slug, order, cursor, limit);
         return WebResponse.builder()
                 .success(true)
@@ -77,7 +77,7 @@ public class ReviewController {
     public WebResponse<?> getRecruitmentProcesses(
             @PathVariable String slug,
             @RequestParam(value = "cursor", required = false) Long cursor,
-            @RequestParam(value = "limit", defaultValue = "10") int limit) {
+            @RequestParam(value = "limit", defaultValue = "15") int limit) {
         var result = reviewService.getRecruitmentProcesses(slug, cursor, limit);
         return WebResponse.builder()
                 .success(true)

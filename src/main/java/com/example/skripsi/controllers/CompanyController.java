@@ -14,10 +14,12 @@ import org.springframework.web.bind.annotation.*;
 public class CompanyController {
 
     private final ICompanyService companyService;
+    private final IReviewService reviewService;
     private final SecurityUtils securityUtils;
 
-    public CompanyController(ICompanyService companyService, SecurityUtils securityUtils) {
+    public CompanyController(ICompanyService companyService, IReviewService reviewService, SecurityUtils securityUtils) {
         this.companyService = companyService;
+        this.reviewService = reviewService;
         this.securityUtils = securityUtils;
     }
 
@@ -110,6 +112,28 @@ public class CompanyController {
         return WebResponse.builder()
                 .success(true)
                 .message("Successfully get company profile")
+                .result(result)
+                .build();
+    }
+
+    @GetMapping("/{slug}/recruitment/{headerId}")
+    public WebResponse<?> getCompanyRecruitmentDetail(@PathVariable String slug,
+                                                      @PathVariable Long headerId) {
+        var result = reviewService.getCompanyReviewDetail(slug, headerId);
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully retrieved recruitment process detail")
+                .result(result)
+                .build();
+    }
+
+    @GetMapping("/{slug}/review/{headerId}")
+    public WebResponse<?> getCompanyReviewDetail(@PathVariable String slug,
+                                                 @PathVariable Long headerId) {
+        var result = reviewService.getCompanyReviewDetail(slug, headerId);
+        return WebResponse.builder()
+                .success(true)
+                .message("Successfully retrieved company review detail")
                 .result(result)
                 .build();
     }

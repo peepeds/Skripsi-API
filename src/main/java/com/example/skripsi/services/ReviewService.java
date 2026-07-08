@@ -42,6 +42,7 @@ public class ReviewService implements IReviewService {
     private static final String LOOKUP_CODE_ADMISSION_TRACK = "ADMISSION_TRACK";
     private static final String LOOKUP_CODE_RECRUITMENT_DURATION = "RECRUITMENT_DURATION";
     private static final int MAX_SUB_CATEGORIES = 3;
+    private static final int DEFAULT_LIST_LIMIT = 15;
 
     private final InternshipHeaderRepository internshipHeaderRepository;
     private final InternshipDetailRepository internshipDetailRepository;
@@ -162,8 +163,9 @@ public class ReviewService implements IReviewService {
         log.info("[getCompanyReviews] slug={}, order={}, cursor={}, limit={}", slug, order, cursor, limit);
         Long companyId = companyService.getCompanyIdBySlug(slug);
         log.info("[getCompanyReviews] resolved companyId={}", companyId);
+        int normalizedLimit = normalizeListLimit(limit);
 
-        Pageable pageable = PageRequest.of(0, limit + 1);
+        Pageable pageable = PageRequest.of(0, normalizedLimit + 1);
         boolean isLatest = !"oldest".equalsIgnoreCase(order);
         
         List<InternshipHeader> headers = isLatest
@@ -183,8 +185,8 @@ public class ReviewService implements IReviewService {
                     .build();
         }
 
-        boolean hasMore = headers.size() > limit;
-        List<InternshipHeader> pageHeaders = hasMore ? headers.subList(0, limit) : headers;
+        boolean hasMore = headers.size() > normalizedLimit;
+        List<InternshipHeader> pageHeaders = hasMore ? headers.subList(0, normalizedLimit) : headers;
 
         ReviewDataBundle data = loadReviewData(pageHeaders, companyId);
         log.info("[getCompanyReviews] data bundle ready, building review items");
@@ -213,7 +215,8 @@ public class ReviewService implements IReviewService {
     @Override
     public CursorPageResponse<MyReviewsResponse.ReviewItem> getMyReviews(Long cursor, int limit) {
         Long userId = securityUtils.getCurrentUserId();
-        Pageable pageable = PageRequest.of(0, limit + 1);
+        int normalizedLimit = normalizeListLimit(limit);
+        Pageable pageable = PageRequest.of(0, normalizedLimit + 1);
         List<InternshipHeader> headers = internshipHeaderRepository.findPageByUserIdDesc(userId, cursor, pageable);
 
         if (headers.isEmpty()) {
@@ -228,8 +231,8 @@ public class ReviewService implements IReviewService {
                     .build();
         }
 
-        boolean hasMore = headers.size() > limit;
-        List<InternshipHeader> pageHeaders = hasMore ? headers.subList(0, limit) : headers;
+        boolean hasMore = headers.size() > normalizedLimit;
+        List<InternshipHeader> pageHeaders = hasMore ? headers.subList(0, normalizedLimit) : headers;
 
         List<Long> headerIds = pageHeaders.stream()
                 .map(InternshipHeader::getInternshipHeaderId)
@@ -280,8 +283,9 @@ public class ReviewService implements IReviewService {
         log.info("[getRecruitmentProcesses] slug={}, cursor={}, limit={}", slug, cursor, limit);
         Long companyId = companyService.getCompanyIdBySlug(slug);
         log.info("[getRecruitmentProcesses] resolved companyId={}", companyId);
+        int normalizedLimit = normalizeListLimit(limit);
 
-        Pageable pageable = PageRequest.of(0, limit + 1);
+        Pageable pageable = PageRequest.of(0, normalizedLimit + 1);
         
         List<InternshipHeader> headers = internshipHeaderRepository.findPageByCompanyIdDesc(companyId, cursor, pageable);
         log.info("[getRecruitmentProcesses] fetched {} headers from DB", headers.size());
@@ -298,8 +302,8 @@ public class ReviewService implements IReviewService {
                     .build();
         }
 
-        boolean hasMore = headers.size() > limit;
-        List<InternshipHeader> pageHeaders = hasMore ? headers.subList(0, limit) : headers;
+        boolean hasMore = headers.size() > normalizedLimit;
+        List<InternshipHeader> pageHeaders = hasMore ? headers.subList(0, normalizedLimit) : headers;
 
         ReviewDataBundle data = loadReviewData(pageHeaders, companyId);
         log.info("[getRecruitmentProcesses] data bundle ready, building process items");
@@ -323,6 +327,20 @@ public class ReviewService implements IReviewService {
                         .hasMore(hasMore)
                         .build())
                 .build();
+    }
+
+    @Override
+    public RecruitmentProcessResponse.ProcessItem getRecruitmentProcessDetail(String slug, Long headerId) {
+        InternshipHeader header = getHeaderBySlugAndId(slug, headerId);
+        ReviewDataBundle data = loadReviewData(List.of(header), header.getCompanyId());
+        return toProcessItem(header, data);
+    }
+
+    @Override
+    public CompanyReviewsResponse.ReviewItem getCompanyReviewDetail(String slug, Long headerId) {
+        InternshipHeader header = getHeaderBySlugAndId(slug, headerId);
+        ReviewDataBundle data = loadReviewData(List.of(header), header.getCompanyId());
+        return toReviewItem(header, data);
     }
 
     @Override
@@ -492,6 +510,25 @@ public class ReviewService implements IReviewService {
         return JobListItemResponse.builder()
                 .jobTitle(jobTitle)
                 .build();
+    }
+
+    private InternshipHeader getHeaderBySlugAndId(String slug, Long headerId) {
+        Long companyId = companyService.getCompanyIdBySlug(slug);
+        InternshipHeader header = internshipHeaderRepository.findById(headerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Internship review not found"));
+
+        if (!companyId.equals(header.getCompanyId())) {
+            throw new ResourceNotFoundException("Internship review not found");
+        }
+
+        return header;
+    }
+
+    private int normalizeListLimit(int requestedLimit) {
+        if (requestedLimit <= 0) {
+            return DEFAULT_LIST_LIMIT;
+        }
+        return Math.min(requestedLimit, DEFAULT_LIST_LIMIT);
     }
 
     private void validateUserNotAlreadyReviewedCompany(Long userId, Long companyId) {

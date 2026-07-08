@@ -23,6 +23,8 @@ public interface IReviewService {
     CursorPageResponse<CompanyReviewsResponse.ReviewItem> getCompanyReviews(String slug, String order, Long cursor, int limit);
     CursorPageResponse<MyReviewsResponse.ReviewItem> getMyReviews(Long cursor, int limit);
     CursorPageResponse<RecruitmentProcessResponse.ProcessItem> getRecruitmentProcesses(String slug, Long cursor, int limit);
+    RecruitmentProcessResponse.ProcessItem getRecruitmentProcessDetail(String slug, Long headerId);
+    CompanyReviewsResponse.ReviewItem getCompanyReviewDetail(String slug, Long headerId);
     RecruitmentProcessSummaryResponse getRecruitmentProcessSummary(String slug);
     RecentReviewResponse getRecentReviews();
 
