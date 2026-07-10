@@ -23,6 +23,7 @@ public class RecentReviewResponse {
     @NoArgsConstructor
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class ReviewItem {
+        private Long internshipHeaderId;
         private String testimony;
         private String createdBy;
         private Double averageRating;

@@ -79,6 +79,7 @@ public interface InternshipDetailRepository extends JpaRepository<InternshipDeta
     List<TopReviewCompanyProjection> findTop10CompaniesWithReviewStats();
 
     @Query(value = "SELECT id.testimony, " +
+            "ih.internship_header_id as internshipHeaderId, " +
             "CONCAT(u.first_name, ' ', u.last_name) as createdByName, " +
             "ROUND(((COALESCE(id.work_culture_rating, 0) + COALESCE(id.learning_opportunity_rating, 0) + COALESCE(id.mentorship_rating, 0) + COALESCE(id.benefits_rating, 0) + COALESCE(id.work_life_balance_rating, 0)) / 5.0), 1) as averageRating, " +
             "c.company_name as companyName, " +

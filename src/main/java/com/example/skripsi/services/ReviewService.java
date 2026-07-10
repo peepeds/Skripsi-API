@@ -503,7 +503,7 @@ public class ReviewService implements IReviewService {
                 .map(this::toRecentReviewItem)
                 .collect(Collectors.toList());
 
-        return toRecentReviewResponse(items);
+        return toRecentReviewResponse(items);                                   
     }
 
     private JobListItemResponse toJobListItemResponse(String jobTitle) {
@@ -1048,6 +1048,7 @@ public class ReviewService implements IReviewService {
 
     private RecentReviewResponse.ReviewItem toRecentReviewItem(RecentReviewProjection row) {
         return RecentReviewResponse.ReviewItem.builder()
+                .internshipHeaderId(row.getInternshipHeaderId())
                 .testimony(row.getTestimony())
                 .createdBy(row.getCreatedByName())
                 .averageRating(row.getAverageRating() != null ? row.getAverageRating() : 0.0)

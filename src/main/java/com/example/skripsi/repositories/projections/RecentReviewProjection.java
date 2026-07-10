@@ -3,6 +3,7 @@ package com.example.skripsi.repositories.projections;
 import java.time.Instant;
 
 public interface RecentReviewProjection {
+    Long getInternshipHeaderId();
     String getTestimony();
     String getCreatedByName();
     Double getAverageRating();
