@@ -23,6 +23,9 @@ public interface IUserService {
     List<UserCertificateRequest> findUserCertificateRequestsByNotificationId(Long notificationId);
     Boolean isCertificateRequestOwner(Long requestId, Long userId);
     List<CertificateResponse> getMyCertificates();
+    CertificateResponse submitCertificateRequest(CreateCertificateRequest request);
+    CertificateResponse reviewCertificateRequest(Long requestId, ReviewCertificateRequest request);
+    CertificateRequestDetailResponse getCertificateRequestDetail(Long requestId);
     CursorPageResponse<CertificateRequestListResponse> getCertificateRequests(String status, Long cursor, int limit);
     CursorPageResponse<AllUserCursorItemResponse> getAllUsersCursor(Long cursor, int limit, String search);
 }

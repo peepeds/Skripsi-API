@@ -1,12 +1,12 @@
 package com.example.skripsi.controllers;
 
 import com.example.skripsi.models.WebResponse;
-import com.example.skripsi.services.AbstractMasterDataService;
+import com.example.skripsi.interfaces.IMasterDataService;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-public abstract class AbstractMasterDataController<Service extends AbstractMasterDataService<?, Response, CreateRequest, UpdateRequest>, Response, CreateRequest, UpdateRequest> {
+public abstract class AbstractMasterDataController<Service extends IMasterDataService<Response, CreateRequest, UpdateRequest>, Response, CreateRequest, UpdateRequest> {
     
     protected final Service service;
     

@@ -5,7 +5,7 @@ import com.example.skripsi.models.region.*;
 
 import java.util.List;
 
-public interface IRegionService {
+public interface IRegionService extends IMasterDataService<RegionResponse, CreateRegionRequest, UpdateRegionRequest> {
     List<RegionResponse> getAllRegion();
     List<RegionOptionResponse> getAllRegionOptions();
     RegionResponse createRegion(CreateRegionRequest createRegionRequest);
