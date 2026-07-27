@@ -1,26 +1,16 @@
 package com.example.skripsi.controllers;
 
+import com.example.skripsi.interfaces.IRegionService;
 import com.example.skripsi.models.*;
 import com.example.skripsi.models.region.*;
-import com.example.skripsi.services.RegionService;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("region")
-public class RegionController extends AbstractMasterDataController<RegionService, RegionResponse, CreateRegionRequest, UpdateRegionRequest> {
+public class RegionController extends AbstractMasterDataOptionsController<IRegionService, RegionResponse, CreateRegionRequest, UpdateRegionRequest> {
 
-    public RegionController(RegionService regionService) {
-        super(regionService);
-    }
-
-    @GetMapping("/options")
-    public WebResponse<?> getAllRegionOptions() {
-        var results = service.getAllRegionOptions();
-        return WebResponse.builder()
-                .success(true)
-                .message("Successfully Get Regions")
-                .result(results)
-                .build();
+    public RegionController(IRegionService regionService) {
+        super(regionService, regionService::getAllRegionOptions, "Successfully Get Regions");
     }
 
     @Override

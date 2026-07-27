@@ -1,14 +1,14 @@
 package com.example.skripsi.controllers;
 
+import com.example.skripsi.interfaces.IDepartmentService;
 import com.example.skripsi.models.department.*;
-import com.example.skripsi.services.DepartmentService;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("department")
-public class DepartmentController extends AbstractMasterDataController<DepartmentService, DepartmentResponse, CreateDepartmentRequest, UpdateDepartmentRequest> {
+public class DepartmentController extends AbstractMasterDataController<IDepartmentService, DepartmentResponse, CreateDepartmentRequest, UpdateDepartmentRequest> {
 
-    public DepartmentController(DepartmentService departmentService) {
+    public DepartmentController(IDepartmentService departmentService) {
         super(departmentService);
     }
 

@@ -2,9 +2,9 @@ package com.example.skripsi.controllers;
 
 import com.example.skripsi.interfaces.ICompanyService;
 import com.example.skripsi.interfaces.IReviewService;
+import com.example.skripsi.interfaces.IUserService;
 import com.example.skripsi.models.*;
 import com.example.skripsi.models.user.*;
-import com.example.skripsi.services.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -16,11 +16,11 @@ import java.util.Map;
 @RequestMapping("user")
 public class UserController {
 
-    private final UserService userService;
+    private final IUserService userService;
     private final ICompanyService companyService;
     private final IReviewService reviewService;
 
-    public UserController(UserService userService, ICompanyService companyService, IReviewService reviewService){
+    public UserController(IUserService userService, ICompanyService companyService, IReviewService reviewService){
         this.userService = userService;
         this.companyService = companyService;
         this.reviewService = reviewService;

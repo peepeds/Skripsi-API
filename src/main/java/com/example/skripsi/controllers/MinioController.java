@@ -1,16 +1,16 @@
 package com.example.skripsi.controllers;
 
+import com.example.skripsi.interfaces.IMinioService;
 import com.example.skripsi.models.*;
-import com.example.skripsi.services.*;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/minio")
 public class MinioController {
 
-    private final MinioService minioService;
+    private final IMinioService minioService;
 
-    public MinioController(MinioService minioService) {
+    public MinioController(IMinioService minioService) {
         this.minioService = minioService;
     }
 

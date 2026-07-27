@@ -1,26 +1,15 @@
 package com.example.skripsi.controllers;
 
-import com.example.skripsi.models.*;
+import com.example.skripsi.interfaces.IMajorService;
 import com.example.skripsi.models.major.*;
-import com.example.skripsi.services.MajorService;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("major")
-public class MajorController extends AbstractMasterDataController<MajorService, MajorResponse, CreateMajorRequest, UpdateMajorRequest> {
+public class MajorController extends AbstractMasterDataOptionsController<IMajorService, MajorResponse, CreateMajorRequest, UpdateMajorRequest> {
 
-    public MajorController(MajorService majorService) {
-        super(majorService);
-    }
-
-    @GetMapping("/options")
-    public WebResponse<?> getAllMajorOptions() {
-        var results = service.getAllMajorOptions();
-        return WebResponse.builder()
-                .success(true)
-                .message("Successfully Get Major")
-                .result(results)
-                .build();
+    public MajorController(IMajorService majorService) {
+        super(majorService, majorService::getAllMajorOptions, "Successfully Get Major");
     }
 
     @Override

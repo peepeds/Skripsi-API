@@ -1,8 +1,8 @@
 package com.example.skripsi.controllers;
 
+import com.example.skripsi.interfaces.ICategoryService;
 import com.example.skripsi.models.*;
 import com.example.skripsi.models.category.*;
-import com.example.skripsi.services.*;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -12,9 +12,9 @@ import java.nio.charset.StandardCharsets;
 
 @RestController
 public class CategoryController {
-    private final CategoryService categoryService;
+    private final ICategoryService categoryService;
 
-    public CategoryController(CategoryService categoryService) {
+    public CategoryController(ICategoryService categoryService) {
         this.categoryService = categoryService;
     }
 

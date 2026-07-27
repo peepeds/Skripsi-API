@@ -12,7 +12,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public abstract class AbstractMasterDataService<Entity, Response, CreateRequest, UpdateRequest> {
+public abstract class AbstractMasterDataService<Entity, Response, CreateRequest, UpdateRequest> implements com.example.skripsi.interfaces.IMasterDataService<Response, CreateRequest, UpdateRequest> {
     protected final JpaRepository<Entity, Integer> repository;
     protected final IUserService userService;
     protected final SecurityUtils securityUtils;

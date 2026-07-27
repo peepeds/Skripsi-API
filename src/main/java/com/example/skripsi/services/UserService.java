@@ -145,6 +145,7 @@ public class UserService implements IUserService {
         return toUserResponse(userProfile);
     }
 
+    @Override
     public CertificateResponse submitCertificateRequest(CreateCertificateRequest request) {
         Long userId = securityUtils.getCurrentUserId();
         log.info("[submitCertificateRequest] userId={} certificateName={}", userId, request.getCertificateName());
@@ -197,6 +198,7 @@ public class UserService implements IUserService {
         return toCertificateResponse(request.getIssuer(), request.getCertificateUrl(), request.getCertificateName());
     }
 
+    @Override
     public CertificateResponse reviewCertificateRequest(Long requestId, ReviewCertificateRequest request) {
         Long reviewerId = securityUtils.getCurrentUserId();
         log.info("[reviewCertificateRequest] requestId={} status={} reviewerId={}", requestId, request.getStatus(), reviewerId);
@@ -272,6 +274,7 @@ public class UserService implements IUserService {
         return toCertificateResponse(userCertificateRequest.getIssuer(), userCertificateRequest.getDocumentUrl(), userCertificateRequest.getDocumentName());
     }
 
+    @Override
     public CertificateRequestDetailResponse getCertificateRequestDetail(Long requestId) {
         Long currentUserId = securityUtils.getCurrentUserId();
 
